@@ -1,5 +1,16 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / GÜNCEL: aşamalı RD2 backlog ve ayrı ürün kabul göstergesi
+
+- [x] Geniş backlog 38 görünür aşama kartına bölündü: tasarım / izole kod / contract-negatif test / ayrı cihaz kabulü; ilk gerçek Windows hedefi consent → gerçek ekran → tek doğrulanmış işlem → disconnect.
+- [x] Chrome/Edge kaynak ve fixture işleri native Ekran Kontrolü tamamlanmasını beklemiyor; gerçek browser profil/işlem kabulü auth + ayrı scope izni gerektiriyor.
+- [x] Cihaz izni bekleyen kartlar hazır güvenli işleri durdurmuyor; transitive dependency ve permission gate regresyonları eklendi.
+- [x] OpenTeam paneli görev yüzdesi ve ayrı tarihli/source/evidence ürün kabul snapshotını gösteriyor; görevler %100 olsa bile ürün kaydı %15 kalıyor. Ürün değeri otomatik disk okuması veya tahmini değildir.
+- [x] `npm run verify` EXIT0: **764/764** (91 dosya), TypeScript ve build PASS. Kurulu build reload + doctor + canlı invalid-product-percent reddi doğrulandı; yeni GPT task gönderilmedi.
+- [x] RD2 canonical `docs/DEVELOPMENT_BACKLOG.md` ve roadmap/TODO/handoff/progress belgeleri kullanıcı onayıyla güncellendi; RD2 runtime/OS/V1/production değişmedi. Ürün **%15 değişmedi**.
+- [ ] Full Phase 0 independent acceptance ve gerçek iki-task GPT/tools + delivery reload-resume E2E AÇIK/NOT_RUN. Backlog import/execute yapılmadı.
+- [x] Ayrıntılar `docs/STAGED_DEVELOPMENT_HANDOFF.md`; kaynak/yerel Git kayıtları, canlı kontrol ve sentetik/native kanıt ayrı raporlanır.
+
 ## 2026-10-10 / GÜNCEL: bağımsız plan ve dependency Git kapıları
 
 - [x] Manager planı bağımsız Reviewer kabulünden önce yürütülmüyor; REWORK aynı işte, üç denemeyle sınırlı.

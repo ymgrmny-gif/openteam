@@ -237,6 +237,7 @@ export interface ProjectWorkspace {
   reviewerRoleId: string
   engineers: Array<{ roleId: string; branch: string; worktree: string }>
   execution?: { baseCommit: string; allowedPaths: Record<string, string[]> }
+  productProgress?: { percent: number; sourcePath: string; asOf: string; evidence: string }
   nodes: ProjectTaskNode[]
   status: 'draft' | 'running' | 'paused' | 'blocked' | 'completed'
   activeNodeId?: string

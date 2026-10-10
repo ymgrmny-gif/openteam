@@ -18,6 +18,12 @@ const labels = {
   'zh-CN': { project: '项目', close: '关闭', title: '项目与任务', empty: '当前群聊暂无项目，请添加 TODO 和目标。', import: '从 TODO 创建项目', name: '项目名称', goals: '目标与授权开发范围', todo: 'TODO.md 文件', source: '来源名称 / 路径', manager: '管理者', reviewer: '独立复核者', engineers: '工程师与隔离工作区', branch: '分支', worktree: '工作树', save: '导入', start: '开始', pause: '暂停', resume: '继续', accepted: '已验收', remaining: '待完成', evidence: '验收证据', criteria: '验收标准', dependencies: '依赖任务', history: '历史', unchecked: 'TODO 已勾选；仍需独立验收', noChat: '请先选择群聊。', gate: '需要授权的任务不会自动执行。导入不会启动任务。', sourceLine: 'TODO 行', states: { open: '待处理', planning: '管理者规划阶段', queued: '排队', running: '执行中', review: '复核中', rework: '返工', accepted: '已验收', blocked: '阻塞', approval: '等待授权', draft: '就绪', paused: '已暂停', completed: '已完成' } },
 }
 
+const progressLabels = {
+  tr: { tasks: 'Görev ilerlemesi', product: 'Kayıtlı ürün kabulü', unknown: 'Ürün kabul kaydı eklenmedi', snapshot: 'Kaynak kaydı; görevlerin bitmesi bu değeri değiştirmez', source: 'Ürün kabul kaynağı', date: 'Kabul kaydının tarihi', evidence: 'Ürün kabul kanıtı' },
+  en: { tasks: 'Task progress', product: 'Recorded product acceptance', unknown: 'No product acceptance record supplied', snapshot: 'Ledger snapshot; finishing tasks does not change this value', source: 'Product acceptance ledger', date: 'Acceptance record date', evidence: 'Product acceptance evidence' },
+  'zh-CN': { tasks: '任务进度', product: '已记录的产品验收', unknown: '未提供产品验收记录', snapshot: '来源快照；任务完成不会改变此数值', source: '产品验收来源', date: '验收记录日期', evidence: '产品验收证据' },
+}
+
 export function createProjectWorkspaceView(deps: Dependencies) {
   let selectedId: string | undefined
   let form: HTMLFormElement | undefined
@@ -61,12 +67,24 @@ export function createProjectWorkspaceView(deps: Dependencies) {
     const text = copy()
     const panel = element('section', undefined, 'project-workspace-panel')
     const summary = projectSummary(project)
-    panel.append(element('h3', project.name), element('p', project.goals), element('p', `${text.states[project.status]} · ${summary.progressPercent}% · ${text.accepted}: ${summary.accepted}/${summary.total} · ${text.remaining}: ${summary.open}`))
+    const progressText = progressLabels[deps.getStore().settings.language]
+    panel.append(element('h3', project.name), element('p', project.goals), element('p', `${text.states[project.status]} · ${progressText.tasks}: ${summary.progressPercent}% · ${text.accepted}: ${summary.accepted}/${summary.total} · ${text.remaining}: ${summary.open}`))
     const progress = document.createElement('progress')
     progress.max = 100
     progress.value = summary.progressPercent
-    progress.setAttribute('aria-label', `${project.name}: ${summary.progressPercent}%`)
+    progress.dataset.progressKind = 'tasks'
+    progress.setAttribute('aria-label', `${progressText.tasks}: ${summary.progressPercent}%`)
     panel.append(progress, element('p', project.sourcePath, 'project-workspace-source'))
+    if (project.productProgress) {
+      const snapshot = project.productProgress
+      panel.append(element('p', `${progressText.product}: ${snapshot.percent}% · ${snapshot.asOf}`))
+      const productProgress = document.createElement('progress')
+      productProgress.max = 100
+      productProgress.value = snapshot.percent
+      productProgress.dataset.progressKind = 'product'
+      productProgress.setAttribute('aria-label', `${progressText.product}: ${snapshot.percent}%`)
+      panel.append(productProgress, element('p', snapshot.sourcePath), element('p', snapshot.evidence), element('p', progressText.snapshot))
+    } else panel.append(element('p', progressText.unknown))
     if (project.reason) panel.append(element('p', project.reason, 'project-workspace-blocked'))
     const controls = element('div', undefined, 'project-workspace-actions')
     if (project.status === 'draft') controls.append(button(text.start, () => { void act('GROUP_PROJECT_EXECUTE', { projectId: project.id }) }, pending))
@@ -136,10 +154,23 @@ export function createProjectWorkspaceView(deps: Dependencies) {
     const source = input('text', text.source)
     const baseCommit = input('text', 'Git base SHA (40)')
     baseCommit.pattern = '[a-f0-9]{40}'
+    const progressText = progressLabels[deps.getStore().settings.language]
+    const productPercent = input('number', `${progressText.product} %`)
+    productPercent.required = false
+    productPercent.min = '0'
+    productPercent.max = '100'
+    productPercent.step = '0.1'
+    const productSource = input('text', progressText.source)
+    const productDate = input('date', progressText.date)
+    const productEvidence = input('text', progressText.evidence)
+    for (const optional of [productSource, productDate, productEvidence]) optional.required = false
     const manager = roleSelect(text.manager, /manager|yönetici|管理/i)
     const reviewer = roleSelect(text.reviewer, /reviewer|inceleme|复核/i)
     result.append(field(text.name, name), field(text.goals, goals), field(text.todo, file), field(text.source, source), field(text.manager, manager), field(text.reviewer, reviewer), element('h4', text.engineers))
     result.append(field('Git base SHA (40)', baseCommit))
+    const productFields = document.createElement('details')
+    productFields.append(element('summary', progressText.product), field(`${progressText.product} %`, productPercent), field(progressText.source, productSource), field(progressText.date, productDate), field(progressText.evidence, productEvidence), element('p', progressText.snapshot))
+    result.append(productFields)
     const assignments: Array<{ enabled: HTMLInputElement; roleId: string; branch: HTMLInputElement; worktree: HTMLInputElement; allowedPaths: HTMLInputElement }> = []
     for (const role of deps.getRoles()) {
       const enabled = input('checkbox', role.name)
@@ -169,7 +200,8 @@ export function createProjectWorkspaceView(deps: Dependencies) {
       if (pending) return
       const selected = file.files?.[0]
       if (!selected) { deps.showError(text.todo); return }
-      void selected.text().then(todo => act('GROUP_PROJECT_IMPORT_TODO', { project: { id: `project-${crypto.randomUUID()}`, chatId: chat.id, name: name.value, goals: goals.value, sourcePath: source.value, todo, managerRoleId: manager.value, reviewerRoleId: reviewer.value, execution: { baseCommit: baseCommit.value, allowedPaths: Object.fromEntries(assignments.filter(item => item.enabled.checked).map(item => [item.roleId, item.allowedPaths.value.split(',').map(path => path.trim()).filter(Boolean)])) }, engineers: assignments.filter(item => item.enabled.checked).map(item => ({ roleId: item.roleId, branch: item.branch.value, worktree: item.worktree.value })) } })).catch(error => deps.showError(String(error)))
+      const productProgress = productPercent.value === '' ? undefined : { percent: Number(productPercent.value), sourcePath: productSource.value, asOf: productDate.value, evidence: productEvidence.value }
+      void selected.text().then(todo => act('GROUP_PROJECT_IMPORT_TODO', { project: { id: `project-${crypto.randomUUID()}`, chatId: chat.id, name: name.value, goals: goals.value, sourcePath: source.value, todo, productProgress, managerRoleId: manager.value, reviewerRoleId: reviewer.value, execution: { baseCommit: baseCommit.value, allowedPaths: Object.fromEntries(assignments.filter(item => item.enabled.checked).map(item => [item.roleId, item.allowedPaths.value.split(',').map(path => path.trim()).filter(Boolean)])) }, engineers: assignments.filter(item => item.enabled.checked).map(item => ({ roleId: item.roleId, branch: item.branch.value, worktree: item.worktree.value })) } })).catch(error => deps.showError(String(error)))
     })
     return result
   }

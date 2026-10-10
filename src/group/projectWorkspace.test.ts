@@ -8,6 +8,14 @@ export const workspaceInput = (todo = '# Service\n- [x] Windows service\n- [ ] V
 })
 
 describe('project workspace', () => {
+  it('imports explicit product ledger evidence without deriving it from task progress', () => {
+    const productProgress = { percent: 15, asOf: '2026-10-10', sourcePath: 'docs/PROJECT_PROGRESS.md', evidence: 'Accepted foundation only' }
+    const project = importProjectTodo({ ...workspaceInput(), productProgress }, 1)
+    expect(project.productProgress).toEqual(productProgress)
+    expect(projectSummary(project).progressPercent).toBe(0)
+    expect(() => importProjectTodo({ ...workspaceInput(), productProgress: { ...productProgress, percent: 101 } }, 1)).toThrow('0..100')
+    expect(() => importProjectTodo({ ...workspaceInput(), productProgress: { ...productProgress, evidence: '' } }, 1)).toThrow('evidence')
+  })
   it('imports nested tasks and treats checked boxes as historical', () => {
     const project = importProjectTodo(workspaceInput('# Service\n- [x] Host\n  - [ ] Contract\n~~~\n- [ ] example\n~~~\n## Native\n- [ ] SCM'), 1)
     expect(project.nodes.map(node => node.title)).toEqual(['Service', 'Host', 'Contract', 'Native', 'SCM'])

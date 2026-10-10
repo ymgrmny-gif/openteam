@@ -23,6 +23,18 @@ function fixture() {
 }
 
 describe('project workspace view', () => {
+  it('keeps completed task progress separate from the recorded product acceptance', () => {
+    const h = fixture()
+    h.project.productProgress = { percent: 15, asOf: '2026-10-10', sourcePath: 'docs/PROJECT_PROGRESS.md', evidence: 'Only accepted RD2-001/002/003; native NOT_RUN' }
+    h.project.nodes[2].status = 'accepted'
+    h.project.nodes[2].evidence = ['Independent task acceptance']
+    h.view.render()
+    expect(h.content.querySelector<HTMLProgressElement>('[data-progress-kind="tasks"]')?.value).toBe(100)
+    expect(h.content.querySelector<HTMLProgressElement>('[data-progress-kind="product"]')?.value).toBe(15)
+    expect(h.content.textContent).toContain('finishing tasks does not change this value')
+    expect(h.content.textContent).toContain('2026-10-10')
+    expect(h.content.textContent).toContain('native NOT_RUN')
+  })
   it('shows expandable hierarchy, historical marks and verified evidence safely', () => {
     const h = fixture()
     expect(h.content.querySelectorAll('[data-task-id]')).toHaveLength(3)

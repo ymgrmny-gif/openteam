@@ -18,6 +18,12 @@ export function importProjectTodo(raw: unknown, now: number): ProjectWorkspace {
   const sourceText = required(input.todo, 'TODO content')
   if (sourceText.length > 500_000) throw new Error('TODO exceeds 500 KB')
   const nodes = parseProjectTodo(sourceText, now)
+  let productProgress: ProjectWorkspace['productProgress']
+  if (input.productProgress !== undefined) {
+    const snapshot = record(input.productProgress)
+    if (typeof snapshot.percent !== 'number' || !Number.isFinite(snapshot.percent) || snapshot.percent < 0 || snapshot.percent > 100) throw new Error('Product progress must be an explicit 0..100 ledger snapshot')
+    productProgress = { percent: snapshot.percent, sourcePath: required(snapshot.sourcePath, 'product progress ledger'), asOf: required(snapshot.asOf, 'product progress observation date'), evidence: required(snapshot.evidence, 'product acceptance evidence') }
+  }
   let execution: ProjectWorkspace['execution']
   if (input.execution !== undefined) {
     const contract = record(input.execution)
@@ -31,7 +37,7 @@ export function importProjectTodo(raw: unknown, now: number): ProjectWorkspace {
     }
     execution = { baseCommit: contract.baseCommit, allowedPaths }
   }
-  return { id, chatId, name: required(input.name, 'project name'), goals: required(input.goals, 'project goals'), sourcePath: required(input.sourcePath, 'TODO source'), sourceText, managerRoleId, reviewerRoleId, engineers, execution, nodes, status: 'draft', createdAt: now, updatedAt: now }
+  return { id, chatId, name: required(input.name, 'project name'), goals: required(input.goals, 'project goals'), sourcePath: required(input.sourcePath, 'TODO source'), sourceText, managerRoleId, reviewerRoleId, engineers, execution, productProgress, nodes, status: 'draft', createdAt: now, updatedAt: now }
 }
 
 export function parseProjectTodo(text: string, now: number): ProjectTaskNode[] {

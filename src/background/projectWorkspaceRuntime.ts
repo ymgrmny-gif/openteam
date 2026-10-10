@@ -56,7 +56,7 @@ export function createProjectWorkspaceRuntime(deps: OrchestrationRuntimeDependen
         }
         const existing = store.projectsById?.[imported.id]
         if (existing) {
-          for (const field of ['chatId', 'name', 'goals', 'sourcePath', 'sourceText', 'managerRoleId', 'reviewerRoleId', 'engineers', 'execution'] as const) {
+          for (const field of ['chatId', 'name', 'goals', 'sourcePath', 'sourceText', 'managerRoleId', 'reviewerRoleId', 'engineers', 'execution', 'productProgress'] as const) {
             if (JSON.stringify(existing[field]) !== JSON.stringify(imported[field])) throw new Error('Project id already has a different TODO or configuration; existing acceptance is preserved')
           }
           return existing
