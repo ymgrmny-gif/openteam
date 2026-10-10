@@ -1,5 +1,9 @@
 # Live communication check and authorized push — 2026-10-10
 
+### Later live checkpoint: correct readiness REWORK and automatic Manager continuation
+
+Reviewer source msg-6a4e9c82-c222-4e18-9b2b-3aed8457d571 received for msg-7800feeb-c514-4a38-80d6-b4d6466e3149: Git/worktree/base/ownership independently PASS; actual Manager assignment lacks actionable D22/path/test/commit instructions, so fail. Reviewer explicitly did not require future report/new commit. Runtime automatically sent same-task Manager repair msg-3f3395e1-0879-4c22-a297-df7b721dfc3e (sent, Manager thinking). This proves corrected live readiness and automatic REWORK routing; workers/acceptance/next audit remain unverified, running 0/2. No manual post/replay/new project.
+
 ## 2026-10-10 / LIVE ACTIVATION — supersedes the paused checkpoint below
 
 - Activated verified extension build through exact Chrome extension Reload; official initialize returned all four existing roles ready. Same workspace rd2-phase0-audit-20261010 and run run-46364fa0-8d07-4f8e-bf61-adfed370347d retained; no prompt replay/new workspace.
