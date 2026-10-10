@@ -733,6 +733,18 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         assistantMessage.contentFormat = contentFormat
         assistantMessage.attachments = attachments.length > 0 ? attachments : undefined
         assistantMessage.status = 'received'
+        // A recovered response also completes its original task; never leave a
+        // successfully read-back answer in a permanently failed delivery ledger.
+        const promptId = assistantMessage.sourceMessageId
+        const userMessage = promptId ? store.messagesById[promptId] : undefined
+        if (userMessage?.type === 'user' && userMessage.chatId === chat.id &&
+            userMessage.deliveryStatus?.[role.id]) {
+          userMessage.deliveryStatus[role.id] = 'received'
+          updateUserMessageDeliveryStatus(userMessage)
+        }
+        role.status = 'ready'
+        role.updatedAt = timestamp
+        chat.status = deps.getChatStatusFromRoles(store, chat)
         chat.updatedAt = timestamp
         return { message: assistantMessage, previousAttachmentIds }
       })

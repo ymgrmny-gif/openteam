@@ -65,3 +65,11 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] `RD2-PHASE0-MANAGER-002` gerçek 5245-karakterlik beş satırlı ürün/sözleşme/test risk matrisi teslim etti; kaynak satırları + `REWORK` kararı.
 - [ ] EngineerA D01-D11 genişletme gönderimi `send was not acknowledged` ile ERROR; kaynak ChatGPT'yi tekrar göndermeden doğrula. EngineerB D12-D22 yanıtı yalnız niyet; yeni Reviewer D01-D22 görevi yalnız niyet. Bunlar tamamlanmış sayılmıyor.
 - [ ] Local ACP `agent.list=[]`, gerçek kodlama işçileri/yerel run yetkileri yapılandırılmalı. Bu bir browser-MCP danışman rolünün kaynak okumasından farklıdır.
+
+## 2026-10-10 / RD2 görev kurtarma son kapısı
+
+- [x] Reviewer RD2-AUDIT-002V final raporu 3.941 karakter, aynı OpenTeam error yanıtında yeni prompt göndermeden kaynak resync ile kurtarıldı; REWORK.
+- [x] Kaynak kurtarma `received` olunca eski görev delivery `error` kalıyordu; yeni `TEAM_ROLE_REPLY_RESYNC` kaynak kullanıcı teslim ve rol durumunu `received`/`ready` olarak düzeltir. Pozitif/negatif testler PASS.
+- [x] `npm run verify` EXIT0: TypeScript, Vitest 714/714 (85 dosya), Vite build PASS.
+- [ ] Son derlemenin Chrome extension reload ve veri/rol readback kapısı.
+- [ ] ACP `agent.list=[]` ve tam RD2 D01-D22/V1 parite native E2E kabulü açık; mevcut rapor REWORK, RD2 source değişmedi.

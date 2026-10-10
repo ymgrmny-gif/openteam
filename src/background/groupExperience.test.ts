@@ -1365,6 +1365,37 @@ describe('background group chat experience handlers', () => {
     expect(harness.tabsSendMessage.mock.calls.some(call => call[1]?.type === 'TEAM_SEND_PROMPT')).toBe(false)
   })
 
+  it('marks the original failed task received after a verified source reply resync', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['prompt-1', 'reply-1'], nextMessageSeq: 3 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', 'Reviewer', { status: 'error' })
+    store.messagesById['prompt-1'] = {
+      id: 'prompt-1', chatId: 'chat-1', seq: 1, type: 'user', content: 'Review',
+      targetRoleIds: ['role-1'], deliveryStatus: { 'role-1': 'error' },
+      createdAt: 1, status: 'error',
+    }
+    store.messagesById['reply-1'] = {
+      id: 'reply-1', chatId: 'chat-1', seq: 2, type: 'assistant',
+      roleId: 'role-1', roleName: 'Reviewer', sourceMessageId: 'prompt-1',
+      content: 'Reply not found', createdAt: 2, status: 'error',
+    }
+    const harness = await setupBackground(store)
+    const result = await harness.invoke({
+      type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'role-1',
+      messageId: 'reply-1', content: 'Verified recovered report',
+      conversationUrl: 'https://chatgpt.com/c/abc',
+    }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' }) as {
+      ok: boolean; store: OpenTeamStore
+    }
+    expect(result.ok).toBe(true)
+    expect(result.store.messagesById['prompt-1'].deliveryStatus?.['role-1']).toBe('received')
+    expect(result.store.messagesById['prompt-1'].status).toBe('received')
+    expect(result.store.messagesById['reply-1'].status).toBe('received')
+    expect(result.store.rolesById['role-1'].status).toBe('ready')
+  })
+
   it('replaces the selected assistant message when the role frame returns the complete reply', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'
