@@ -488,6 +488,27 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
+      // A tab crash can strand old tasks in pending after the role frame is
+      // recreated. Never replay them: fail closed only if the source role has
+      // no active prompt and the stale task is older than ten minutes.
+      if (role.status === 'ready' && !role.lastPromptMessageId &&
+          !role.geminiConversationId && !role.geminiConversationUrl) {
+        for (const messageId of chat.messageIds) {
+          const task = store.messagesById[messageId]
+          if (task?.type !== 'user' || timestamp - task.createdAt < 600_000) continue
+          const deliveryStatus = task.deliveryStatus?.[role.id]
+          if (deliveryStatus !== 'pending' && deliveryStatus !== 'sent') continue
+          const hasReply = chat.messageIds.some(id => {
+            const reply = store.messagesById[id]
+            return reply?.type === 'assistant' && reply.roleId === role.id &&
+              reply.sourceMessageId === task.id && reply.status === 'received'
+          })
+          if (hasReply) continue
+          task.deliveryStatus![role.id] = 'error'
+          updateUserMessageDeliveryStatus(task)
+          deps.log.warn('frame-ready:orphaned-task-failed-without-replay', { chatId, roleId, messageId: task.id })
+        }
+      }
       role.status = 'ready'
       role.updatedAt = timestamp
       updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))

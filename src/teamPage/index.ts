@@ -61,6 +61,20 @@ themeController.initializeTheme()
 
 const iframeHost = createIframeHost({
   visibleHost: teamDomRefs.iframeHostEl,
+  shouldRetainBackgroundChat(chatId) {
+    const chat = store.chatsById[chatId]
+    if (!chat) return false
+    for (const id of chat.roleIds) {
+      const role = store.rolesById[id]
+      if (role?.status === 'thinking' || role?.status === 'loading' ||
+          role?.siteHealth?.status === 'generating') return true
+    }
+    return chat.messageIds.some(messageId => {
+      const msg = store.messagesById[messageId]
+      return msg?.type === 'user' && Object.values(msg.deliveryStatus ?? {})
+        .some(status => status === 'pending' || status === 'sent')
+    })
+  },
   onEvent(event) {
     log.debug(`iframe-host:${event.type}`, event)
   },

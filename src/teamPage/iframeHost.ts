@@ -55,6 +55,8 @@ export interface IframeHostOptions {
   assignIntervalMs?: number
   hostTabId?: number
   onEvent?: (event: IframeHostEvent) => void
+  /** Retain background frames only for chats with in-flight work. */
+  shouldRetainBackgroundChat?: (chatId: string) => boolean
 }
 
 interface RoleFrameRecord {
@@ -80,6 +82,7 @@ export class IframeHost {
   private readonly window: Window
   private readonly assignIntervalMs: number
   private readonly onEvent?: (event: IframeHostEvent) => void
+  private readonly shouldRetainBackgroundChat?: (chatId: string) => boolean
   private readonly groupsByChatId = new Map<string, HTMLElement>()
   private readonly framesByRoleKey = new Map<string, RoleFrameRecord>()
   private activeChatId?: string
@@ -95,6 +98,7 @@ export class IframeHost {
     this.assignIntervalMs = options.assignIntervalMs ?? DEFAULT_ASSIGN_INTERVAL_MS
     this.hostTabId = options.hostTabId
     this.onEvent = options.onEvent
+    this.shouldRetainBackgroundChat = options.shouldRetainBackgroundChat
     this.visibleHost.dataset.openteamIframeHost = 'true'
     options.hiddenHost?.remove()
   }
@@ -214,6 +218,7 @@ export class IframeHost {
 
     this.highlightChatGroup(chat.id)
     this.preserveOtherChatGroups(chat.id)
+    this.evictIdleBackgroundChats(chat.id)
     this.scrollChatGroupIntoView(group)
     this.emit({ type: 'chat-activated', chatId: chat.id })
     return this.getChatState(chat.id)
@@ -412,6 +417,17 @@ export class IframeHost {
   private preserveOtherChatGroups(activeChatId: string): void {
     for (const chatId of this.groupsByChatId.keys()) {
       if (chatId !== activeChatId) this.preserveChatGroup(chatId)
+    }
+  }
+
+  private evictIdleBackgroundChats(activeId: string): void {
+    // Do not keep several heavyweight ChatGPT apps resident after room switches.
+    // An in-flight role is never evicted, even if its room is no longer selected.
+    if (!this.shouldRetainBackgroundChat) return
+    for (const chatId of [...this.groupsByChatId.keys()]) {
+      if (chatId !== activeId && !this.shouldRetainBackgroundChat(chatId)) {
+        this.removeChat(chatId)
+      }
     }
   }
 

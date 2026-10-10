@@ -271,6 +271,28 @@ describe('background group chat experience handlers', () => {
     ])
   })
 
+  it('fails an orphaned ten-minute-old pending task on frame rejoin without sending it twice', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['orphan'], nextMessageSeq: 2 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', 'Engineer', { status: 'ready' })
+    store.messagesById.orphan = {
+      id: 'orphan', chatId: 'chat-1', seq: 1, type: 'user',
+      content: 'Old task', createdAt: 1, status: 'pending',
+      targetRoleIds: ['role-1'], deliveryStatus: { 'role-1': 'pending' },
+    }
+    const harness = await setupBackground(store)
+    const response = await harness.invoke({
+      type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900,
+    }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/' }) as { ok: boolean; store: OpenTeamStore }
+    expect(response.ok).toBe(true)
+    expect(response.store.messagesById.orphan.deliveryStatus?.['role-1']).toBe('error')
+    expect(response.store.messagesById.orphan.status).toBe('error')
+    expect(response.store.rolesById['role-1'].status).toBe('ready')
+    expect(harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')).toHaveLength(0)
+  })
+
   it('includes persona from description for legacy roles without systemPrompt on the first user message', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

@@ -429,6 +429,34 @@ describe('IframeHost', () => {
     expect(host.getRoleFrame('chat-2', 'role-2')?.parentElement?.parentElement).toBe(host.getChatGroup('chat-2'))
   })
 
+  it('evicts idle background chat iframes but retains a chat with in-flight work', () => {
+    const visibleHost = document.createElement('div')
+    document.body.append(visibleHost)
+    const busy = new Set(['busy'])
+    const onEvent = vi.fn()
+    const host = createIframeHost({
+      visibleHost,
+      shouldRetainBackgroundChat: chatId => busy.has(chatId),
+      onEvent,
+    })
+    host.activateChat(makeChat('idle', ['idle-role']), [makeRole('idle', 'idle-role')])
+    const idleFrame = host.getRoleFrame('idle', 'idle-role')
+    host.activateChat(makeChat('busy', ['busy-role']), [makeRole('busy', 'busy-role')])
+    expect(host.getChatGroup('idle')).toBeUndefined()
+    expect(host.getRoleFrame('idle', 'idle-role')).toBeUndefined()
+    expect(idleFrame?.isConnected).toBe(false)
+    expect(onEvent).toHaveBeenCalledWith({ type: 'role-disposed', chatId: 'idle', roleId: 'idle-role' })
+
+    host.activateChat(makeChat('next', ['next-role']), [makeRole('next', 'next-role')])
+    expect(host.getRoleFrame('busy', 'busy-role')).toBeInstanceOf(HTMLIFrameElement)
+    expect(host.getRoleFrame('next', 'next-role')).toBeInstanceOf(HTMLIFrameElement)
+    busy.clear()
+    host.activateChat(makeChat('idle', ['idle-role']), [makeRole('idle', 'idle-role')])
+    expect(host.getRoleFrame('busy', 'busy-role')).toBeUndefined()
+    expect(host.getRoleFrame('next', 'next-role')).toBeUndefined()
+    expect(host.getRoleFrame('idle', 'idle-role')).toBeInstanceOf(HTMLIFrameElement)
+  })
+
   it('removes a deleted chat group and all of its role frames', () => {
     const visibleHost = document.createElement('div')
     document.body.append(visibleHost)
