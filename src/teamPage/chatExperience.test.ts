@@ -47,9 +47,9 @@ describe('chat experience helpers', () => {
     const now = new Date(2026, 4, 2, 12, 0).getTime()
 
     expect(formatChatListTime(new Date(2026, 4, 2, 9, 35).getTime(), now)).toBe('09:35')
-    expect(formatChatListTime(new Date(2026, 4, 1, 23, 13).getTime(), now)).toBe('昨天')
-    expect(formatChatListTime(new Date(2026, 3, 30, 9, 18).getTime(), now)).toBe('前天')
-    expect(formatChatListTime(new Date(2026, 3, 29, 21, 17).getTime(), now)).toBe('04/29')
+    expect(formatChatListTime(new Date(2026, 4, 1, 23, 13).getTime(), now)).toBe('Dün')
+    expect(formatChatListTime(new Date(2026, 3, 30, 9, 18).getTime(), now)).toBe('Evvelsi gün')
+    expect(formatChatListTime(new Date(2026, 3, 29, 21, 17).getTime(), now)).toBe('29.04')
   })
 
   it('builds WeChat-style render items with time dividers and compact repeat messages', () => {

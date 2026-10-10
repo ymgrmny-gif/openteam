@@ -3,7 +3,7 @@ import type { MessageHighlightColor } from './highlightColors'
 
 export type RoomMode = 'independent' | 'collaborative'
 export type ChatSite = 'gemini' | 'chatgpt' | 'claude' | 'deepseek' | 'grok'
-export type OpenTeamLanguage = 'en' | 'zh-CN'
+export type OpenTeamLanguage = 'tr' | 'en' | 'zh-CN'
 export type RoleModelSource = 'site' | 'external'
 export type ExternalModelFormat = 'openai' | 'anthropic'
 

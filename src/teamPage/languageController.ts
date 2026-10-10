@@ -1,6 +1,7 @@
 import { normalizeLanguage, translateUi, type TeamLanguage } from '../shared/i18n'
 
 export interface LanguageSettingsControllerDependencies {
+  turkishButton: HTMLButtonElement
   englishButton: HTMLButtonElement
   chineseButton: HTMLButtonElement
   getLanguage(): TeamLanguage
@@ -37,6 +38,7 @@ export function createLanguageSettingsController(deps: LanguageSettingsControlle
 
   function render(): void {
     const language = pendingLanguage ?? normalizeLanguage(deps.getLanguage())
+    deps.turkishButton.setAttribute('aria-pressed', String(language === 'tr'))
     deps.englishButton.setAttribute('aria-pressed', String(language === 'en'))
     deps.chineseButton.setAttribute('aria-pressed', String(language === 'zh-CN'))
     applyTeamLanguage(language)
@@ -45,6 +47,7 @@ export function createLanguageSettingsController(deps: LanguageSettingsControlle
   function registerEvents(): void {
     if (registered) return
     registered = true
+    deps.turkishButton.addEventListener('click', () => updateLanguage('tr'))
     deps.englishButton.addEventListener('click', () => updateLanguage('en'))
     deps.chineseButton.addEventListener('click', () => updateLanguage('zh-CN'))
   }

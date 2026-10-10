@@ -3,6 +3,7 @@ import type { ChatSite, ExternalModelConfig, GroupChat, GroupRole, OpenTeamStore
 import { DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS, DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS, MAX_ORCHESTRATION_MAX_NODE_EXECUTIONS } from '../group/types'
 import { arrangeOrchestrationGraph, createOrchestrationCanvas, type LoadX6, type OrchestrationCanvas } from './orchestrationCanvas'
 import { runCommandWithReconnect } from './sendWithReconnect'
+import { translateUi } from '../shared/i18n'
 
 export interface OrchestrationModalDependencies {
   openOrchestrationEl: HTMLButtonElement
@@ -401,7 +402,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     previewTitle.className = 'tiny'
     previewTitle.textContent = '审核返回 JSON 预览'
     const schema = document.createElement('pre')
-    schema.textContent = '{\n  "decision": "pass | fail",\n  "reason": "审核说明",\n  "failedCriteria": [],\n  "nextRoundInstruction": "不通过时的重试说明"\n}'
+    schema.textContent = `{\n  "decision": "pass | fail",\n  "reason": "${translateUi('审核说明', deps.getStore().settings.language)}",\n  "failedCriteria": [],\n  "nextRoundInstruction": "${translateUi('不通过时的重试说明', deps.getStore().settings.language)}"\n}`
     preview.append(previewTitle, schema)
     deps.orchestrationReviewSettingsEl.append(intro, criteriaField, attemptsField, actionField, preview)
   }

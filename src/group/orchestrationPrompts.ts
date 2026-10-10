@@ -18,6 +18,11 @@ export interface BuildOrchestrationReviewMessageContentInput {
 export function buildOrchestrationRoleMessageContent(input: BuildOrchestrationRoleMessageContentInput): string {
   const language = normalizeLanguage(input.language)
   const previousInstruction = input.previousReviewResult?.nextRoundInstruction?.trim()
+  if (language === 'tr') return joinSections([
+    `Görev:\n${input.userTask}`,
+    input.currentStage.description ? `Bu adımın görevi:\n${input.currentStage.description}` : undefined,
+    previousInstruction ? `Önceki incelemede istenen düzeltme:\n${previousInstruction}` : undefined,
+  ])
   return joinSections([
     `${language === 'en' ? 'Current task:' : '当前任务：'}\n${input.userTask}`,
     input.currentStage.description ? `${language === 'en' ? 'Current node task:' : '当前节点任务：'}\n${input.currentStage.description}` : undefined,
@@ -27,6 +32,12 @@ export function buildOrchestrationRoleMessageContent(input: BuildOrchestrationRo
 
 export function buildOrchestrationReviewMessageContent(input: BuildOrchestrationReviewMessageContentInput): string {
   const language = normalizeLanguage(input.language)
+  if (language === 'tr') return joinSections([
+    `Görev:\n${input.userTask}`,
+    input.currentStage.description ? `İnceleme adımının görevi:\n${input.currentStage.description}` : undefined,
+    `Kabul ölçütleri:\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || 'Sonucun görev gereksinimlerini karşılayıp karşılamadığını değerlendir.'}`,
+    buildOrchestrationReviewResponseInstruction(language),
+  ])
   return joinSections([
     `${language === 'en' ? 'Current task:' : '当前任务：'}\n${input.userTask}`,
     input.currentStage.description ? `${language === 'en' ? 'Current review node task:' : '当前审核节点任务：'}\n${input.currentStage.description}` : undefined,
@@ -37,6 +48,11 @@ export function buildOrchestrationReviewMessageContent(input: BuildOrchestration
 
 export function buildOrchestrationReviewResponseInstruction(languageInput?: OpenTeamLanguage): string {
   const language = normalizeLanguage(languageInput)
+  if (language === 'tr') return joinSections([
+    PROMPT_I18N.tr.jsonOnly,
+    `Yanıt şu JSON biçiminde olmalı:\n${reviewSchema(language)}`,
+    'decision yalnızca pass veya fail olmalı. Ölçütler karşılanmıyorsa fail kullan; nextRoundInstruction alanında hangi düzeltmenin gerektiğini açıkça yaz.',
+  ])
   return joinSections([
     PROMPT_I18N[language].jsonOnly,
     `${language === 'en' ? 'The JSON format must match:' : 'JSON 格式必须匹配：'}\n${reviewSchema(language)}`,
@@ -47,7 +63,14 @@ export function buildOrchestrationReviewResponseInstruction(languageInput?: Open
 }
 
 function reviewSchema(language: OpenTeamLanguage): string {
-  const schema = language === 'en'
+  const schema = language === 'tr'
+    ? {
+        decision: 'pass | fail',
+        reason: 'İnceleme gerekçesi',
+        failedCriteria: ['Karşılanmayan ölçütler'],
+        nextRoundInstruction: 'Reddedildiyse yapılacak düzeltme; onaylandıysa boş metin',
+      }
+    : language === 'en'
     ? {
         decision: 'pass | fail',
         reason: 'Review explanation',

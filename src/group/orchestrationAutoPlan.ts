@@ -1,4 +1,5 @@
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
+import { buildTurkishAutoOrchestrationPrompt } from './orchestrationAutoPlan.tr'
 import type { ChatSite, GroupRole, OpenTeamStore, OrchestrationAutoPlanHistoryEntry, OrchestrationFlow } from './types'
 
 export type AutoOrchestrationNodeKind = 'execute' | 'review'
@@ -59,6 +60,7 @@ const DEFAULT_AUTO_MAX_NODE_EXECUTIONS = 30
 export function buildAutoOrchestrationPrompt(input: AutoOrchestrationPromptInput): string {
   const language = normalizeLanguage(input.store.settings.language)
   if (language === 'en') return buildEnglishAutoOrchestrationPrompt(input)
+  if (language === 'tr') return buildTurkishAutoOrchestrationPrompt(input)
 
   return [
     '你是 OpenTeam 的 AI 群聊流程编排规划器。',
@@ -264,10 +266,10 @@ export function buildAutoOrchestrationRepairPrompt(input: {
   return [
     buildAutoOrchestrationPrompt(input),
     '',
-    language === 'en' ? 'The previous output was invalid. Fix only the JSON. Do not explain.' : '上一次输出无效。请只修复 JSON，不要解释。',
-    `${language === 'en' ? 'Error' : '错误'}：${input.error}`,
+    language === 'tr' ? 'Önceki yanıt geçersizdi. Yalnızca JSON içeriğini düzelt; açıklama ekleme.' : language === 'en' ? 'The previous output was invalid. Fix only the JSON. Do not explain.' : '上一次输出无效。请只修复 JSON，不要解释。',
+    `${language === 'tr' ? 'Hata' : language === 'en' ? 'Error' : '错误'}: ${input.error}`,
     '',
-    language === 'en' ? 'Previous output:' : '上一次输出：',
+    language === 'tr' ? 'Önceki yanıt:' : language === 'en' ? 'Previous output:' : '上一次输出：',
     input.invalidOutput.slice(0, 12000),
   ].join('\n')
 }

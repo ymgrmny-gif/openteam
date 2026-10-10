@@ -28,11 +28,13 @@ describe('team page language controller', () => {
 
   it('persists language changes from the settings switch', () => {
     document.body.innerHTML = `
+      <button id="language-tr" aria-pressed="false">Türkçe</button>
       <button id="language-en" aria-pressed="false">English</button>
       <button id="language-zh" aria-pressed="true">中文</button>
     `
     const runCommand = vi.fn(async () => undefined)
     const controller = createLanguageSettingsController({
+      turkishButton: document.querySelector<HTMLButtonElement>('#language-tr')!,
       englishButton: document.querySelector<HTMLButtonElement>('#language-en')!,
       chineseButton: document.querySelector<HTMLButtonElement>('#language-zh')!,
       getLanguage: () => 'zh-CN',
@@ -49,12 +51,14 @@ describe('team page language controller', () => {
 
   it('applies the selected language immediately while the setting is being saved', () => {
     document.body.innerHTML = `
+      <button id="language-tr" aria-pressed="false">Türkçe</button>
       <button id="language-en" aria-pressed="true">English</button>
       <button id="language-zh" aria-pressed="false">中文</button>
       <button id="agent-control-toggle">本机智能体控制：关闭</button>
     `
     const runCommand = vi.fn(() => new Promise<void>(() => undefined))
     const controller = createLanguageSettingsController({
+      turkishButton: document.querySelector<HTMLButtonElement>('#language-tr')!,
       englishButton: document.querySelector<HTMLButtonElement>('#language-en')!,
       chineseButton: document.querySelector<HTMLButtonElement>('#language-zh')!,
       getLanguage: () => 'en',
@@ -103,6 +107,32 @@ describe('team page language controller', () => {
 
     expect(document.body.textContent).toContain('尚未读取消息')
     expect(document.body.textContent).toContain('等待连接')
+  })
+
+  it('uses natural Turkish in navigation, dynamic statuses and accessibility labels without rewriting messages', () => {
+    document.body.innerHTML = `
+      <nav><button aria-label="设置">设置</button><button aria-label="添加人员">添加人员</button></nav>
+      <main>
+        <h2>未选择群聊</h2><p>创建或选择一个群聊开始协作</p>
+        <span>3 个群聊 · 20 个人员库人员</span>
+        <span>协作群聊模式 · 2 位成员 · 3 条消息</span>
+        <button aria-label="重新回复">重新回复</button>
+        <textarea placeholder="输入消息，@成员可指定回复；不 @ 仅记录到群聊。"></textarea>
+        <article class="message-body">Keep this user message in its original language.</article>
+      </main>
+    `
+    applyTeamLanguage('tr')
+    expect(document.documentElement.lang).toBe('tr')
+    expect(document.querySelector('nav')?.textContent).toContain('Ayarlar')
+    expect(document.body.textContent).toContain('Sohbet seçilmedi')
+    expect(document.body.textContent).toContain('3 sohbet · 20 kayıtlı rol')
+    expect(document.body.textContent).toContain('Ortak çalışma · 2 üye · 3 mesaj')
+    expect(document.querySelector('textarea')?.placeholder).toContain('Mesaj yazın.')
+    expect(document.querySelector('.message-body')?.textContent).toBe('Keep this user message in its original language.')
+    applyTeamLanguage('en')
+    expect(document.querySelector('nav')?.textContent).toContain('Settings')
+    applyTeamLanguage('tr')
+    expect(document.querySelector('nav')?.textContent).toContain('Ayarlar')
   })
 
   it('translates message controls without translating message bodies', () => {

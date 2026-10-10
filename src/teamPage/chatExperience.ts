@@ -87,19 +87,19 @@ export function formatChatListTime(timestamp: number, now = Date.now()): string 
   const dayDelta = Math.round((currentDay - targetDay) / 86_400_000)
 
   if (dayDelta === 0) {
-    return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(target)
+    return new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(target)
   }
-  if (dayDelta === 1) return '昨天'
-  if (dayDelta === 2) return '前天'
+  if (dayDelta === 1) return 'Dün'
+  if (dayDelta === 2) return 'Evvelsi gün'
 
   const month = String(target.getMonth() + 1).padStart(2, '0')
   const day = String(target.getDate()).padStart(2, '0')
-  if (target.getFullYear() === current.getFullYear()) return `${month}/${day}`
-  return `${target.getFullYear()}/${month}/${day}`
+  if (target.getFullYear() === current.getFullYear()) return `${day}.${month}`
+  return `${day}.${month}.${target.getFullYear()}`
 }
 
 export function formatMessageTime(timestamp: number): string {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat('tr-TR', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

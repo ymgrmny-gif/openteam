@@ -1,9 +1,12 @@
 import type { BuiltinGroupTemplate, BuiltinGroupTemplateRole } from '../group/builtinGroupTemplates'
 import type { OpenTeamLanguage, RoleTemplate } from '../group/types'
+import { TURKISH_UI_TRANSLATIONS } from './i18n.tr'
+import { TURKISH_MESSAGES } from './i18n.tr.messages'
+import { trDynamicUi, TR_CATEGORIES, TR_GROUP_NAMES, TR_ROLE_NAMES, TR_ROLE_LIBRARY, trGroupSummary, trGroupQuestions, trRoleDescription, trRolePrompt } from './i18n.tr.extra'
 
 export type TeamLanguage = OpenTeamLanguage
 
-export const DEFAULT_LANGUAGE: TeamLanguage = 'en'
+export const DEFAULT_LANGUAGE: TeamLanguage = 'tr'
 
 const UI_TRANSLATIONS: Record<string, string> = {
   '缩小窗口': 'Minimize window',
@@ -246,6 +249,11 @@ export const PROMPT_I18N = {
     responseLanguageInstruction: '请使用中文回复，除非用户明确要求其他语言。',
     personaLanguageInstruction: 'systemPrompt 使用中文，避免空泛口号，尽量可执行。',
     jsonOnly: '你必须只返回合法 JSON，不要 Markdown，不要解释文字，不要代码块。',
+  },
+  tr: {
+    responseLanguageInstruction: 'Kullanıcı özellikle başka bir dil istemedikçe Türkçe yanıt ver.',
+    personaLanguageInstruction: 'Rol adı, açıklaması ve sistem yönergesi doğal Türkçe olsun. Somut ve uygulanabilir talimatlar yaz.',
+    jsonOnly: 'Yalnızca geçerli JSON üret. Markdown, açıklama veya kod bloğu ekleme.',
   },
   en: {
     responseLanguageInstruction: 'Respond in English unless the user explicitly asks for another language.',
@@ -700,7 +708,7 @@ const USER_TYPE_TRANSLATIONS: Record<string, string> = {
 }
 
 export function normalizeLanguage(value: unknown): TeamLanguage {
-  return value === 'zh-CN' ? 'zh-CN' : DEFAULT_LANGUAGE
+  return value === 'zh-CN' || value === 'en' || value === 'tr' ? value : DEFAULT_LANGUAGE
 }
 
 export function defaultLanguageForEnvironment(navigatorLike: Pick<Navigator, 'language' | 'languages'> | undefined = globalThis.navigator): TeamLanguage {
@@ -708,22 +716,44 @@ export function defaultLanguageForEnvironment(navigatorLike: Pick<Navigator, 'la
     ...(Array.isArray(navigatorLike?.languages) ? navigatorLike.languages : []),
     navigatorLike?.language,
   ].filter((language): language is string => typeof language === 'string')
-  return languages.some(language => /^zh(?:-|$)/i.test(language)) ? 'zh-CN' : DEFAULT_LANGUAGE
+  // OpenTeam ships with Turkish as the default; users can change it in Settings.
+  void languages
+  return DEFAULT_LANGUAGE
 }
 
 export function translateUi(source: string, language: TeamLanguage): string {
   if (language === 'zh-CN') return source
+  if (language === 'tr') return TURKISH_UI_TRANSLATIONS[source] ?? TURKISH_MESSAGES[source] ?? trDynamicUi(source, translateUi) ?? source
   return UI_TRANSLATIONS[source] ?? translateUiPattern(source) ?? source
 }
 
 export function localizeCategory(category: string | undefined, language: TeamLanguage): string | undefined {
   if (!category) return undefined
   if (normalizeLanguage(language) === 'zh-CN') return category
+  if (language === 'tr') return TR_CATEGORIES[category] ?? category
   return CATEGORY_TRANSLATIONS[category] ?? category
 }
 
 export function localizeGroupTemplate(template: BuiltinGroupTemplate, language: TeamLanguage): BuiltinGroupTemplate {
   if (normalizeLanguage(language) === 'zh-CN') return template
+  if (language === 'tr') {
+    const name = TR_GROUP_NAMES[template.id] ?? 'Uzman Ekibi'
+    return {
+      ...template,
+      name,
+      category: localizeCategory(template.category, 'tr') ?? template.category,
+      summary: trGroupSummary(name),
+      userTypes: template.userTypes.map(type => TURKISH_UI_TRANSLATIONS[type] ?? 'İlgili kullanıcılar'),
+      aliases: [name, template.id, localizeCategory(template.category, 'tr') ?? ''],
+      suggestedQuestions: trGroupQuestions(name),
+      defaultChatName: name,
+      roles: template.roles.map((role, index) => {
+        const roleName = TR_ROLE_NAMES[baseRoleName(role.name)] ?? `${name.replace(/ Ekibi$/, '')} Uzmanı ${index + 1}`
+        const description = trRoleDescription(roleName, name)
+        return { ...role, name: roleName, description, systemPrompt: trRolePrompt(roleName, description) }
+      }),
+    }
+  }
   const localization = GROUP_TEMPLATE_LOCALIZATIONS[template.id]
   const name = localization?.name ?? fallbackGroupTemplateName(template)
   return {
@@ -741,6 +771,16 @@ export function localizeGroupTemplate(template: BuiltinGroupTemplate, language: 
 
 export function localizeRoleTemplate(template: RoleTemplate, language: TeamLanguage): RoleTemplate {
   if (normalizeLanguage(language) === 'zh-CN') return template
+  if (language === 'tr') {
+    if (template.type === 'custom' && !template.id.startsWith('default-custom-')) return template
+    const direct = TR_ROLE_LIBRARY[template.id]
+    const groupName = template.sourceTemplateId ? (TR_GROUP_NAMES[template.sourceTemplateId] ?? 'Uzman Ekibi') : 'Uzman Ekibi'
+    const name = direct?.name ?? TR_ROLE_NAMES[baseRoleName(template.name)] ?? (ROLE_TEMPLATE_LOCALIZATIONS[template.id]?.name.replace(/([a-z])([A-Z])/g, '$1 $2') ?? `${groupName.replace(/ Ekibi$/, '')} Uzmanı`)
+    const description = direct?.description ?? trRoleDescription(name, groupName)
+    return { ...template, name, category: localizeCategory(template.category, 'tr'), description,
+      sourceTemplateName: template.sourceTemplateId ? TR_GROUP_NAMES[template.sourceTemplateId] : template.sourceTemplateName,
+      systemPrompt: trRolePrompt(name, description) }
+  }
   const direct = ROLE_TEMPLATE_LOCALIZATIONS[template.id]
   if (direct) {
     return {

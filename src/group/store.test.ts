@@ -205,12 +205,12 @@ describe('group store', () => {
 
     await expect(loadStore()).resolves.toMatchObject({
       settings: {
-        language: 'en',
+        language: 'tr',
       },
     })
   })
 
-  it('uses the browser language as the default for stores without a saved language', async () => {
+  it('uses Turkish as the default for stores without a saved language', async () => {
     const originalNavigator = globalThis.navigator
     Object.defineProperty(globalThis, 'navigator', {
       configurable: true,
@@ -220,7 +220,7 @@ describe('group store', () => {
     try {
       await expect(loadStore()).resolves.toMatchObject({
         settings: {
-          language: 'zh-CN',
+          language: 'tr',
         },
       })
     } finally {

@@ -33,6 +33,7 @@ export interface TeamPageDomRefs {
   templateFormTitleEl: HTMLElement
   settingsButtonEl: HTMLButtonElement
   settingsMenuEl: HTMLElement
+  languageTrEl: HTMLButtonElement
   languageEnEl: HTMLButtonElement
   languageZhEl: HTMLButtonElement
   agentControlToggleEl: HTMLButtonElement
@@ -197,6 +198,7 @@ export function createTeamPageDomRefs(): TeamPageDomRefs {
     templateFormTitleEl: requireElement<HTMLElement>('#template-form-title'),
     settingsButtonEl: requireElement<HTMLButtonElement>('#settings-button'),
     settingsMenuEl: requireElement<HTMLElement>('#settings-menu'),
+    languageTrEl: requireElement<HTMLButtonElement>('#language-tr'),
     languageEnEl: requireElement<HTMLButtonElement>('#language-en'),
     languageZhEl: requireElement<HTMLButtonElement>('#language-zh'),
     agentControlToggleEl: requireElement<HTMLButtonElement>('#agent-control-toggle'),

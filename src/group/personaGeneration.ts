@@ -15,6 +15,29 @@ export interface RoleTemplatePersonaPromptInput {
 
 export function buildRoleTemplatePersonaPrompt(input: RoleTemplatePersonaPromptInput): string {
   const language = normalizeLanguage(input.language)
+  if (language === 'tr') {
+    return [
+      'OpenTeam rol kütüphanesi için yapay zekâ destekli rol oluşturucusun.',
+      PROMPT_I18N.tr.jsonOnly,
+      '',
+      'Kullanıcının verdiği kısa açıklamadan tekrar kullanılabilir bir ekip rolü oluştur.',
+      'Kurallar:',
+      `1. name kısa ve anlaşılır bir Türkçe rol adı olmalı, en fazla ${ROLE_NAME_MAX_CHARACTERS} karakter.`,
+      '2. description tek cümlelik görev ve sorumluluk açıklaması olmalı.',
+      '3. systemPrompt modelin kullanabileceği somut kimlik, çalışma biçimi, çıktı ve sınır yönergelerini içermeli.',
+      `4. ${PROMPT_I18N.tr.personaLanguageInstruction}`,
+      '',
+      'JSON örneği:',
+      JSON.stringify({
+        name: 'Büyüme Danışmanı',
+        description: 'Yeni kullanıcı kazanımı ve dönüşüm yollarını değerlendirir.',
+        systemPrompt: 'Büyüme danışmanı olarak önce hedefleri ve kısıtları belirle, ardından uygulanabilir öneriler sun.',
+      }, null, 2),
+      '',
+      'Kullanıcının açıklaması:',
+      input.description.trim(),
+    ].join('\n')
+  }
   if (language === 'en') {
     return [
       'You are the OpenTeam people-library persona generator.',

@@ -59,11 +59,11 @@ export function getContextCursorAfterAck(chat: GroupChat, messages?: GroupMessag
 export function formatContextMessage(message: GroupMessage, languageInput?: OpenTeamLanguage): string {
   const language = normalizeLanguage(languageInput)
   const speaker = message.type === 'assistant'
-    ? message.roleName ?? (language === 'en' ? 'Person' : '人员')
+    ? message.roleName ?? (language === 'tr' ? 'Ekip üyesi' : language === 'en' ? 'Person' : '人员')
     : message.type === 'user'
-      ? (language === 'en' ? 'User' : '用户')
-      : (language === 'en' ? 'System' : '系统')
-  return `${speaker}${language === 'en' ? ': ' : '：'}${message.content}`
+      ? (language === 'tr' ? 'Kullanıcı' : language === 'en' ? 'User' : '用户')
+      : (language === 'tr' ? 'Sistem' : language === 'en' ? 'System' : '系统')
+  return `${speaker}${language !== 'zh-CN' ? ': ' : '：'}${message.content}`
 }
 
 function isMessageVisibleToRole(message: GroupMessage, roleId: string): boolean {

@@ -2546,9 +2546,18 @@ export function filterBuiltinGroupTemplates(filter: BuiltinGroupTemplateFilter):
 
 export function buildBuiltinGroupTemplateWelcomeMessage(template: BuiltinGroupTemplate, languageInput: TeamLanguage = 'zh-CN'): string {
   const language = normalizeLanguage(languageInput)
-  const moderatorName = template.roles[0]?.name ?? (language === 'en' ? 'Moderator' : '主持人')
+  const moderatorName = template.roles[0]?.name ?? (language === 'tr' ? 'Ekip yöneticisi' : language === 'en' ? 'Moderator' : '主持人')
   const riskNotice = templateRiskNotice(template, language)
   const questions = template.suggestedQuestions.map((question, index) => `${index + 1}. ${question}`).join('\n')
+  if (language === 'tr') {
+    return [
+      `“${template.name}” ekibine hoş geldiniz. Ben “${moderatorName}”. Önce hedefinizi netleştirmenize yardımcı olacak, sonra gerektiğinde uygun rolleri göreve dahil edeceğim.`,
+      riskNotice,
+      'İhtiyacınızı doğrudan anlatabilir veya aşağıdaki sorulardan biriyle başlayabilirsiniz:',
+      questions,
+      'Başlamak için hedefinizi, mevcut durumunuzu, kısıtlarınızı ve beklediğiniz sonucu belirtin.',
+    ].filter(Boolean).join('\n\n')
+  }
   if (language === 'en') {
     return [
       `Welcome to "${template.name}". I am "${moderatorName}". I will first help clarify your goal, then bring in the right roles to collaborate when needed.`,
@@ -2578,10 +2587,12 @@ function templateSuggestedQuestions(template: BuiltinGroupTemplateDefinition): s
 
 function templateRiskNotice(template: BuiltinGroupTemplate, language: TeamLanguage = 'zh-CN'): string | undefined {
   if (template.riskLevel === 'professional') {
+    if (language === 'tr') return 'Bilgilendirme: Bu şablon bilgi düzenleme ve riskleri değerlendirme içindir; uzman görüşünün yerine geçmez. Sağlık, güvenlik, hukuk, finans, vergi veya mühendislik gibi önemli konularda yetkin bir uzmana danışın.'
     if (language === 'en') return 'Boundary reminder: this template is for information organization and risk spotting only. It does not replace qualified professional advice. For health, safety, legal, financial, tax, engineering, or other high-stakes matters, consult a qualified professional.'
     return '边界提醒：该模板仅用于信息整理和风险提示，不能替代专业人士意见；涉及健康、安全、法律、资金、税务、工程等重大事项，请咨询具备资质的专业人士。'
   }
   if (template.riskLevel === 'sensitive') {
+    if (language === 'tr') return 'Hatırlatma: Planları, riskleri ve iletişim belgelerini düzenlemeye yardımcı olabilirim. Önemli kararları, gizlilik ve uyum gereksinimlerini gerçek bilgilerle doğrulayın.'
     if (language === 'en') return 'Usage reminder: I can help organize plans, risks, and communication materials. For compliance, commitments, privacy, or major decisions, verify against real materials and professional judgment.'
     return '使用提醒：我可以帮助整理方案、风险和沟通材料；涉及合规、承诺、隐私或重大决策时，请结合真实资料和专业确认。'
   }

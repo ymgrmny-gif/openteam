@@ -97,7 +97,7 @@ async function handleSettingsUpdate(message: RuntimeMessage) {
       store.settings.agentControlPort = message.agentControlPort
     }
     const language = readOptionalString(message.language)
-    if (language === 'en' || language === 'zh-CN') {
+    if (language === 'en' || language === 'zh-CN' || language === 'tr') {
       store.settings.language = language
     }
   })

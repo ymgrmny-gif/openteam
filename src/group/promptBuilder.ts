@@ -1,4 +1,5 @@
 import { formatContextMessage, type UnsyncedContextResult } from './contextSync'
+import { buildTurkishCollaborativePrompt, buildTurkishIndependentPrompt, buildTurkishInitializationPrompt } from './promptBuilder.tr'
 import { PROMPT_I18N, normalizeLanguage } from '../shared/i18n'
 import type { GroupChat, GroupMessage, GroupRole, MessageReference, OpenTeamLanguage } from './types'
 
@@ -23,6 +24,7 @@ export function buildPrompt(input: BuildPromptInput): string {
 }
 
 export function buildIndependentPrompt(input: BuildPromptInput): string {
+  if (normalizeLanguage(input.language) === 'tr') return buildTurkishIndependentPrompt(input)
   const reference = input.reference ?? input.userMessage.references?.[0]
   const language = normalizeLanguage(input.language)
   return joinSections([
@@ -35,6 +37,7 @@ export function buildIndependentPrompt(input: BuildPromptInput): string {
 }
 
 export function buildCollaborativePrompt(input: BuildPromptInput): string {
+  if (normalizeLanguage(input.language) === 'tr') return buildTurkishCollaborativePrompt(input)
   const reference = input.reference ?? input.userMessage.references?.[0]
   const language = normalizeLanguage(input.language)
 
@@ -52,6 +55,7 @@ export function buildCollaborativePrompt(input: BuildPromptInput): string {
 
 export function buildInitializationPrompt(chat: GroupChat, role: GroupRole, roles: GroupRole[], includePersona = true, languageInput?: OpenTeamLanguage): string {
   const language = normalizeLanguage(languageInput)
+  if (language === 'tr') return buildTurkishInitializationPrompt(chat, role, roles, includePersona)
   if (chat.mode === 'collaborative') {
     return joinSections([
       language === 'en' ? 'You are in an AI group chat.' : '你正在一个 AI 群聊中。',
@@ -91,8 +95,8 @@ export function roleUsesChatGptGptsPersona(role: GroupRole): boolean {
 
 export function buildMemberList(roles: GroupRole[], languageInput?: OpenTeamLanguage): string {
   const language = normalizeLanguage(languageInput)
-  const members = roles.map(role => `- ${role.name}${role.description ? `${language === 'en' ? ': ' : '：'}${role.description}` : ''}`).join('\n')
-  return language === 'en' ? `Group chat members:\n${members}` : `群聊成员：\n${members}`
+  const members = roles.map(role => `- ${role.name}${role.description ? `${language !== 'zh-CN' ? ': ' : '：'}${role.description}` : ''}`).join('\n')
+  return language === 'tr' ? `Ekip üyeleri:\n${members}` : language === 'en' ? `Group chat members:\n${members}` : `群聊成员：\n${members}`
 }
 
 function buildRoleBlock(role: GroupRole, includePersona: boolean, language: OpenTeamLanguage): string {
