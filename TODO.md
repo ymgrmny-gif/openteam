@@ -83,3 +83,12 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] Bağımsız Reviewer `RD2-AUDIT-002V` 3941 karakterlik FINAL REWORK cevabı kaynak readback/resync ile prompt resend olmadan kurtarıldı; üst denetim henüz tam ACCEPTED değil.
 - [x] Geçiş raporu: `docs/RD2_OPENTEAM_CUTOVER_ACCEPTANCE_20261010.md`.
 - [ ] Web browser rollerinin okuma+sohbet smoke testi ACCEPTED_SCOPED; ACP `agent.list=[]` ve tam native RD2 Phase0 audit/üretim kodlama yetkisi HENÜZ kabul edilmedi. Yeni feature koduna geçme.
+
+## 2026-10-10 / GPT geliştiricilere doğrudan araç yetkisi
+
+- [x] Ayrı ACP modeline bağımlı kalmadan mevcut ChatGPT hesap/RemoteDesktop MCP araçlarıyla geliştirme yaklaşımı seçildi; bağlanan her araç için gerçekten mevcut erişim kanıtı gerekiyor.
+- [x] Mevcut Phase0 salt-okunur denetim odası korunarak yeni `RD2 / GPT Geliştirme Ekibi` odası oluşturuldu (`chat-a7afea7b-0f97-494d-a6ef-33e3c1c5168d`): Manager, EngineerA, EngineerB, IndependentReviewer; 4 rol `ready`.
+- [x] Rollere terminal/dosya yazma/Git/test/diğer bağlı araçları kullanabilecek geliştirme talimatları verildi (`docs/RD2_OPENTEAM_GPT_DEVELOPMENT_ROLES.json`). Yapay zekâlar yine GPT, ayrı ACP AI ajanı şart değil.
+- [x] Yalnız izole `E:\\Projects\\RD2_Work\\OpenTeamGPTToolSmoke_20261010` alanı oluşturuldu; RD2 `main` ve OpenTeam kodu değiştirilmedi.
+- [ ] EngineerA'nın `OPENTEAM-GPT-CODE-SMOKE-001` gerçek write+node test+git init+readback görevi gönderildi, ilk kontrol sırasında `pending`, no files yet. **Kesin PASS verilmedi, yeniden göndermeyin**; message `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` üzerinden task.read ile takip edin.
+- [ ] Kanıtlı write/test/Git PASS sonrası Manager ve IndependentReviewer aracılığıyla bu geliştirme odasına gerçek güvenli geliştirme görevleri atansın; Phase0 REWORK/native OS gate korunur.
