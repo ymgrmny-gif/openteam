@@ -92,3 +92,11 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] Yalnız izole `E:\\Projects\\RD2_Work\\OpenTeamGPTToolSmoke_20261010` alanı oluşturuldu; RD2 `main` ve OpenTeam kodu değiştirilmedi.
 - [ ] EngineerA'nın `OPENTEAM-GPT-CODE-SMOKE-001` gerçek write+node test+git init+readback görevi gönderildi, ilk kontrol sırasında `pending`, no files yet. **Kesin PASS verilmedi, yeniden göndermeyin**; message `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` üzerinden task.read ile takip edin.
 - [ ] Kanıtlı write/test/Git PASS sonrası Manager ve IndependentReviewer aracılığıyla bu geliştirme odasına gerçek güvenli geliştirme görevleri atansın; Phase0 REWORK/native OS gate korunur.
+
+## 2026-10-10 / OpenTeam Chrome Out of Memory — canlı teşhis
+
+- [x] Kullanıcının ekranındaki OpenTeam sekmesinde `Not enough memory to open this page` / `Error code: Out of Memory` doğrulandı (Visual Sensor/UIA).
+- [x] Sistem genelinde 31.84 GB RAM, ~15.97 GB boş RAM. Chrome'da bir OpenTeam sekmesi ~2.3 GB, bir diğeri ~1.2 GB gösteriliyordu; OOM büyük olasılıkla renderer/iframe kaynak tüketimi, toplam PC RAM yetersizliği kanıtlanmadı.
+- [x] İki çökmüş OpenTeam sekmesi doğrudan yalnız o sekmelerde Ctrl+W ile kapatıldı; çalışan OpenTeam sekmesi, görev ve roller korundu. Son aktif UI OOM göstermiyor.
+- [ ] Sadece açık tek OpenTeam odasıyla kontrollü bellek ölçümü + iframe mount/unmount/primary-lifecycle yük testi; tab başına tüketim ve Chrome OOM kök nedeni doğrulanıp düzeltilecek.
+- [ ] EngineerA `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` hâlâ `pending`, rol reload sonrası `ready`, sandbox boş. Eski promptu yeniden gönderme; kaynak sohbet/dispatch kanıtı incele, gerekiyorsa explicit failed/cancel reconciliation sonrası yeni kontrollü tek işçi denemesi yap.
