@@ -60,6 +60,37 @@ async function setup(todo: string) {
 }
 
 describe('project workspace runtime', () => {
+  it('resumes the same proven unsent initial checkpoint after iframe recovery, including reload', async () => {
+    const h = await setup('- [ ] Audit <!-- openteam: {"id":"audit","executable":true} -->')
+    h.deps.waitForRetry = vi.fn(async () => undefined)
+    vi.mocked(h.deps.runtimeFrames.getByRole).mockReturnValue(undefined)
+    await h.invoke('GROUP_PROJECT_EXECUTE')
+    const before = (await h.getStore()).projectsById!.p
+    const originalRunId = before.nodes[0].runId
+    expect(before.status).toBe('blocked')
+    expect(h.deps.sendPrompt).not.toHaveBeenCalled()
+    await expect(h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')).rejects.toThrow('Only paused')
+    vi.mocked(h.deps.runtimeFrames.getByRole).mockImplementation((_chatId, roleId) => ({ chatId: 'chat-1', roleId, tabId: 101, frameId: 1, ready: true, lastSeenAt: 1 }))
+    h.reload()
+    await h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')
+    const store = await h.getStore()
+    expect(store.projectsById!.p.status).toBe('running')
+    expect(store.projectsById!.p.nodes[0].runId).toBe(originalRunId)
+    expect(Object.keys(store.orchestrationRunsById)).toHaveLength(1)
+    expect(store.orchestrationRunsById[originalRunId!].preflightResumeCount).toBe(1)
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
+    await expect(h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')).rejects.toThrow('Only paused')
+    await h.pump()
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
+  })
+  it('does not resume an uncertain delivery or other blocked reason', async () => {
+    const h = await setup('- [ ] Audit <!-- openteam: {"id":"audit","executable":true} -->')
+    vi.mocked(h.deps.sendPrompt).mockRejectedValue(new Error('Transport disconnected after dispatch'))
+    await h.invoke('GROUP_PROJECT_EXECUTE')
+    expect((await h.getStore()).projectsById!.p.status).toBe('blocked')
+    await expect(h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')).rejects.toThrow('Only paused')
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
+  })
   it('blocks before worker dispatch when an accepted prerequisite is absent; reload cannot bypass', async () => {
     const h = await setup('- [ ] A <!-- openteam: {"id":"a","executable":true} -->\n- [ ] B <!-- openteam: {"id":"b","dependsOn":["a"],"executable":true} -->')
     await h.invoke('GROUP_PROJECT_EXECUTE')

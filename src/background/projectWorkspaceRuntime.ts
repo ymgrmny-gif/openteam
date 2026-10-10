@@ -1,7 +1,7 @@
 import type { BackgroundMessageRoute } from './messageRouter'
 import { loadStore } from '../group/store'
 import { mutateStore, requireChat, requireRole } from './storeAccess'
-import { startOrchestrationRun, stopOrchestrationRun, resumeOrchestrationRun, type OrchestrationRuntimeDependencies } from './orchestrationRuntime'
+import { startOrchestrationRun, stopOrchestrationRun, resumeOrchestrationRun, canResumeUnsentProjectRun, type OrchestrationRuntimeDependencies } from './orchestrationRuntime'
 import { compileProjectBacklog } from '../group/projectBacklog'
 import { ancestorIds, applyManagerBreakdown, importProjectTodo, nextProjectTask, projectSummary } from '../group/projectWorkspace'
 import { executionForNode, validateArtifact } from '../group/projectExecutionGate'
@@ -107,12 +107,14 @@ export function createProjectWorkspaceRuntime(deps: OrchestrationRuntimeDependen
     { type: 'GROUP_PROJECT_WORKSPACE_RESUME', handler: async message => {
       const result = await mutateStore(store => {
         const project = requireProject(store, message.projectId)
-        if (project.status !== 'paused') throw new Error('Only paused projects may resume; blocked work requires reconciliation')
-        project.status = 'running'
-        project.updatedAt = deps.now()
         const node = project.nodes.find(item => item.id === project.activeNodeId)
         const run = node?.runKey ? Object.values(store.orchestrationRunsById).find(item => item.flowSnapshot?.project?.id === node.runKey) : undefined
-        return { chatId: project.chatId, runId: run?.status === 'stopped' ? run.id : undefined }
+        const unsent = project.status === 'blocked' && run && project.reason === run.error && canResumeUnsentProjectRun(store, run, deps)
+        if (project.status !== 'paused' && !unsent) throw new Error('Only paused projects may resume; blocked work requires reconciliation')
+        project.status = 'running'
+        delete project.reason
+        project.updatedAt = deps.now()
+        return { chatId: project.chatId, runId: run?.status === 'stopped' || unsent ? run!.id : undefined }
       })
       if (result.result.runId) await resumeOrchestrationRun(deps, result.result)
       await pump()

@@ -1,5 +1,13 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / CANLI BAŞLATMA: RD2 Phase 0 audit tranche
+
+- [x] Existing four GPT roles verified; two exclusive doc-only RD2 audit worktrees created at clean baseline `85f8be5fd64f9f0faa0f8f5da27d91532bdaab30`. Canonical feature backlog remains gated; see `docs/RD2_PHASE0_LAUNCH_20261010.md`.
+- [x] Finite workspace `rd2-phase0-audit-20261010` imported and execute invoked. Initial Manager iframe preflight failed before prompt creation. Official initialize restored all four roles.
+- [x] Narrow same-run recovery added: only exact initial iframe block, zero stage/prompt, original root checkpoint, ready frame/role and bounded three explicit resumptions. Other blocked/uncertain sends remain forbidden. Synthetic regressions cover reload, original run identity, no duplicate, missing frame and uncertain send.
+- [x] `npm run verify` EXIT0, **766/766** tests / 91 files, TypeScript and build PASS. Installed dist reloaded on exact OpenTeam details page; doctor connected. Same initial run resumed after reload and one Manager prompt created; pending delivery is not completed acceptance.
+- [ ] Real Manager/readiness Reviewer/Engineer/delivery Reviewer/automatic next audit evidence and full Phase 0 integration still pending. Product acceptance 15% unchanged. Historical pending msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b untouched.
+
 ## 2026-10-10 / GÜNCEL: aşamalı RD2 backlog ve ayrı ürün kabul göstergesi
 
 - [x] Geniş backlog 38 görünür aşama kartına bölündü: tasarım / izole kod / contract-negatif test / ayrı cihaz kabulü; ilk gerçek Windows hedefi consent → gerçek ekran → tek doğrulanmış işlem → disconnect.

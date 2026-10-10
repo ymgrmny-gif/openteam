@@ -281,6 +281,7 @@ export interface OrchestrationStageRun {
 }
 
 export interface OrchestrationRun {
+  preflightResumeCount?: number
   id: string
   chatId: string
   flowId: string

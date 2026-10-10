@@ -268,13 +268,32 @@ export async function recoverOrchestrationRuns(deps: OrchestrationRuntimeDepende
   await detectAndHandleStaleRuns(deps, true)
 }
 
+// Recovery is limited to a proven unsent initial checkpoint. A persisted
+// stage/prompt, uncertain delivery or any other block remains non-replayable.
+export function canResumeUnsentProjectRun(store: OpenTeamStore, run: OrchestrationRun, deps: OrchestrationRuntimeDependencies): boolean {
+  const flow = run.flowSnapshot
+  const chat = store.chatsById[run.chatId]
+  if (!chat || !flow?.project || run.status !== 'error' || !run.error?.startsWith('BLOCKED: ') || !run.error.endsWith('人员 iframe 尚未就绪，请先恢复人员') || run.stageRuns.length || (run.preflightResumeCount ?? 0) >= 3 || JSON.stringify(run.pendingStageIndices) !== JSON.stringify(rootStageIndices(flow))) return false
+  if (getChatMessages(store, chat).some(message => message.orchestrationRunId === run.id && message.orchestrationKind !== 'task')) return false
+  const active = store.orchestrationRunsById[store.activeOrchestrationRunIdByChatId[chat.id]]
+  if (active && active.id !== run.id && active.status !== 'completed') return false
+  const targets = rootStageIndices(flow).flatMap(index => targetRoleIdsForStage(flow.stages[index]))
+  return targets.length > 0 && targets.every(id => {
+    const role = store.rolesById[id]
+    return role && role.status === 'ready' && !role.lastPromptMessageId && role.siteHealth?.status !== 'blocked' && role.siteHealth?.status !== 'unauthorized'
+  }) && !findLocalRoleFrameBlocker(store, chat, targets, deps)
+}
+
 export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; runId?: string }): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
   const timestamp = deps.now()
   const prepared = await mutateStore(store => {
     const chat = requireChat(store, input.chatId)
     const run = findResumableRun(store, chat, input.runId)
     if (!run) throw new Error('找不到可继续的编排')
-    if (run.status !== 'stopped') throw new Error('只有已停止的编排可以继续')
+    if (run.status !== 'stopped') {
+      if (!canResumeUnsentProjectRun(store, run, deps)) throw new Error('只有已停止的编排可以继续')
+      run.preflightResumeCount = (run.preflightResumeCount ?? 0) + 1
+    }
     const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
     validateExecutableFlow(store, chat, flow)
     const last = currentStageRun(run)
