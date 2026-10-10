@@ -23,14 +23,14 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 
 - [x] RD2 main/origin/main temiz, eski A/B/C/V branch ve worktree kaldırılmış; eski işçi sekmeleri kapalı (Git + Chrome doğrulandı).
 - [x] Windows'ta OpenTeam CLI daemon ana modül algılaması düzeltildi; yerel servis 127.0.0.1:19305 üzerinde `daemon start` PASS.
-- [ ] OpenTeam Chrome eklentisi `doctor.extension.connected=true` gösterecek şekilde güvenli bağlanmalı; şu an false.
+- [x] OpenTeam Chrome eklentisi `doctor.extension.connected=true`; UIA ve CLI doctor readback PASS (2026-10-10).
 - [ ] Gerçek yerel ACP kodlama ajanı `agent list` çıktısında görünmeli; şu an daemon `agents=[]`.
-- [ ] Dört kalıcı rol (Manager, Engineer A/B, Independent Reviewer) ve salt-okunur Phase 0 audit için Başmimar rolü oluşturulup Skill readback testi yapılmalı.
+- [x] Dört çekirdek rol ve Başmimar OpenTeam odasında oluşturuldu. [ ] Her rol için tam Skill içerik readback ve tool execution kapısı henüz tüm rollerle kanıtlanmadı.
 - [ ] ACP bağlantısında salt-okunur Git/araç erişimi ve yetki sınırları gerçek kanıtlarla test edilmeli; hiçbir web persona otomatik dosya erişimli varsayılmamalı.
 - [ ] Phase 0: RD2 mimari, ürün hedefleri, D01-D22, V1 parite ve sözleşmeleri gerçek kaynak/test/native evidence ile bağımsız denetlenmeli; feature geliştirme ancak kabulden sonra.
 - [ ] Yeni build'in kurulu Chrome eklentisine kontrollü devri ve gerçek sohbet limiti E2E testi ayrı aşamada, diğer çalışan sohbetlere dokunmadan.
-- [x] OpenTeam Phase 0 için 4 çekirdek rol + gerektiğinde Başmimar; CLI'ye uygun JSON dosyaları `docs/RD2_OPENTEAM_CORE_ROLES.json` ve `docs/RD2_OPENTEAM_OPTIONAL_ARCHITECT.json` içinde hazırlandı. (Henüz eklentide kayıtlı değiller.)
-- [ ] Normal Chrome OpenTeam v1.0.3 kurulu, fakat `agentControlEnabled=false`; GUI'de Ayarlar > Yerel ajan kontrolü etkinleştirme gerekli. Sınırlı CUA denemesi güvenli biçimde FAIL oldu, eylem yapılmadı.
+- [x] OpenTeam Phase 0 için 4 çekirdek rol + Başmimar JSON dosyaları hazırlandı ve beşi de canlı OpenTeam odasına eklendi.
+- [x] Normal Chrome OpenTeam v1.0.3 kurulu; `agentControlEnabled=true` UIA ve CLI ile doğrulandı. Önceki başarısız CUA denemesinde hiçbir işlem yapılmamıştı.
 
 ## 2026-10-10 / OpenTeam canlı geçiş ve ilk RD2 denetimi
 
@@ -40,6 +40,6 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] RD2-AUDIT-001 salt-okunur kaynak denetimi başlatıldı. EngineerB B01–B05 raporu odada `received`: native Visual Sensor/Live Viewer/Screen Control/Browser adapter eksik, gerçek latency/FPS NOT_VERIFIED. En az dört kaynağın başlığını doğrudan readback ile doğruladık.
 - [ ] EngineerA gerçek ChatGPT kaynak sohbetinde son raporu üretti; **OpenTeam ikinci mesaj için yanlış `send was not acknowledged` hata durumu yazdı. Yeniden GÖNDERME — önce mevcut gerçek yanıtı senkronize et!** Kaynak sohbet /c/6aca1ba0-2850-83eb-ad29-282fb3d7c105.
 - [ ] Manager cevap yakalama error `response_not_found`, EngineerB ikinci mesaj sonucu hata gösteriyor; önce kaynak sohbetleri karşılaştır, otomatik retry yok. `src/teamPage/messagesView.ts:227-233` error durumunda `retryRoleReply` kullanıyor: bu yanıtın yeni gönderimle tekrar işlenme riskidir. Salt readback/resync tercih edilmeli.
-- [ ] IndependentReviewer için salt-okunur karşı inceleme görevi OpenTeam'de iletildi; sonucu olmadan Phase 0 ACCEPTED denmeyecek.
+- [x] IndependentReviewer salt-okunur karşı inceleme sonucu `REWORK` verdi; testler yeniden çalıştırılmadı, native E2E NOT_RUN ve Phase 0 FULL ACCEPTED değil. Ön rapor `docs/RD2_PHASE0_PRELIMINARY_AUDIT_20261010.md`.
 - [ ] Daemon ACP listesi hâlâ `agents=[]`: browser role ChatGPT araç erişimi ile ayrı native/local ACP kodlama ajanı bağlantısı farklıdır; gerçek kodlama için ayrıca sağlam yetki ve araç testi gerekli.
 - [ ] İlk Phase 0 denetiminin gerçek tamamlanma koşulu: A+B+Başmimar raporları ve IndependentReviewer kod/satır kanıtı, P0–P3 onayı, kod değişikliği olmadan TODO/GLOBALMEMORY eşleşmesi.
