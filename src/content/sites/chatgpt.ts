@@ -100,7 +100,7 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     }
     sendButton.click()
     // A dispatched click is not proof of delivery. Do not silently retry an uncertain send.
-    await waitForSendAcknowledgement(editor, previousUserTurns, inputTimeoutMs)
+    await waitForSendAcknowledgement(content, previousUserTurns, inputTimeoutMs)
   }
 
   return {
@@ -207,11 +207,12 @@ async function waitForComposerSendButton(editor: ComposerEditor, timeoutMs: numb
   })
 }
 
-async function waitForSendAcknowledgement(editor: ComposerEditor, previousUserTurns: number, timeoutMs: number): Promise<void> {
-  const acknowledged = () => (
-    document.querySelectorAll(CHATGPT_SELECTORS.userTurn).length > previousUserTurns ||
-    readComposerText(editor) === ''
-  )
+async function waitForSendAcknowledgement(content: string, previousUserTurns: number, timeoutMs: number): Promise<void> {
+  const expected = content.replace(/\s+/g, ' ').trim()
+  const acknowledged = () => {
+    const newUserTurns = [...document.querySelectorAll(CHATGPT_SELECTORS.userTurn)].slice(previousUserTurns)
+    return newUserTurns.some(turn => (turn.textContent ?? '').replace(/\s+/g, ' ').trim().includes(expected))
+  }
   if (acknowledged()) return
   return new Promise((resolve, reject) => {
     const startedAt = Date.now()

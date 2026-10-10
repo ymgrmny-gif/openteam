@@ -62,6 +62,7 @@ describe('ChatGPT site adapter', () => {
     voiceButton.addEventListener('click', () => {
       clickListener()
       document.querySelector<HTMLElement>('#prompt-textarea')?.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend', '<section data-turn="user">hello</section>')
     })
     window.setTimeout(() => {
       voiceButton.disabled = false
@@ -91,7 +92,10 @@ describe('ChatGPT site adapter', () => {
     `
     const editor = document.querySelector<HTMLElement>('.ProseMirror')!
     const send = document.querySelector<HTMLButtonElement>('button')!
-    const onClick = vi.fn(() => editor.replaceChildren())
+    const onClick = vi.fn(() => {
+      editor.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend', '<section data-turn="user">hello</section>')
+    })
     send.addEventListener('click', onClick)
     await createChatGptAdapter({ inputTimeoutMs: 300 }).fillAndSend('hello', true)
     expect(onClick).toHaveBeenCalledTimes(1)
@@ -143,6 +147,20 @@ describe('ChatGPT site adapter', () => {
     await expect(createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('test'))
       .rejects.toThrow('not acknowledged')
     expect(click).toHaveBeenCalledTimes(1)
+  })
+
+
+  it('does not accept an emptied composer without a matching user turn', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" data-testid="send-button">Send</button></form>
+    `
+    document.querySelector('button')?.addEventListener('click', () => {
+      document.querySelector<HTMLElement>('#prompt-textarea')?.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend', '<section data-turn="user">unrelated user message</section>')
+    })
+    await expect(createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('expected prompt'))
+      .rejects.toThrow('not acknowledged')
   })
 
   it('reads assistant markdown replies without action button text', () => {
