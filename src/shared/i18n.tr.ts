@@ -410,5 +410,6 @@ export const TURKISH_UI_TRANSLATIONS: Record<string, string> = {
   "关闭自动编排": "Otomatik akış penceresini kapat",
   "关闭模板选择": "Şablon seçimini kapat",
   "0 个人员": "0 rol",
-  "0 人": "0 kişi"
+  "0 人": "0 kişi",
+  "{ \"decision\": \"pass | fail\", \"reason\": \"审核说明\", \"failedCriteria\": [], \"nextRoundInstruction\": \"不通过时的重试说明\" }": "{ \"decision\": \"pass | fail\", \"reason\": \"İnceleme gerekçesi\", \"failedCriteria\": [], \"nextRoundInstruction\": \"Reddedildiyse düzeltilecekler\" }"
 }

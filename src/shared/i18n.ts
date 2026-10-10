@@ -1,8 +1,9 @@
 import type { BuiltinGroupTemplate, BuiltinGroupTemplateRole } from '../group/builtinGroupTemplates'
 import type { OpenTeamLanguage, RoleTemplate } from '../group/types'
 import { TURKISH_UI_TRANSLATIONS } from './i18n.tr'
+import { TR_USER_TYPES } from './i18n.tr.users'
 import { TURKISH_MESSAGES } from './i18n.tr.messages'
-import { trDynamicUi, TR_CATEGORIES, TR_GROUP_NAMES, TR_ROLE_NAMES, TR_ROLE_LIBRARY, trGroupSummary, trGroupQuestions, trRoleDescription, trRolePrompt } from './i18n.tr.extra'
+import { trDynamicUi, TR_CATEGORIES, TR_GROUP_NAMES, TR_ROLE_NAMES, TR_ROLE_LIBRARY, trGroupSummary, trGroupQuestions, trRoleDescription, trRolePrompt, trAdvisorPrompt } from './i18n.tr.extra'
 
 export type TeamLanguage = OpenTeamLanguage
 
@@ -743,7 +744,7 @@ export function localizeGroupTemplate(template: BuiltinGroupTemplate, language: 
       name,
       category: localizeCategory(template.category, 'tr') ?? template.category,
       summary: trGroupSummary(name),
-      userTypes: template.userTypes.map(type => TURKISH_UI_TRANSLATIONS[type] ?? 'İlgili kullanıcılar'),
+      userTypes: template.userTypes.map(type => TR_USER_TYPES[type] ?? type),
       aliases: [name, template.id, localizeCategory(template.category, 'tr') ?? ''],
       suggestedQuestions: trGroupQuestions(name),
       defaultChatName: name,
@@ -779,7 +780,7 @@ export function localizeRoleTemplate(template: RoleTemplate, language: TeamLangu
     const description = direct?.description ?? trRoleDescription(name, groupName)
     return { ...template, name, category: localizeCategory(template.category, 'tr'), description,
       sourceTemplateName: template.sourceTemplateId ? TR_GROUP_NAMES[template.sourceTemplateId] : template.sourceTemplateName,
-      systemPrompt: trRolePrompt(name, description) }
+      systemPrompt: template.type === 'builtin' ? trAdvisorPrompt(name, description) : trRolePrompt(name, description) }
   }
   const direct = ROLE_TEMPLATE_LOCALIZATIONS[template.id]
   if (direct) {

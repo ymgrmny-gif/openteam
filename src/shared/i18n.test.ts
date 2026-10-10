@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BUILTIN_GROUP_TEMPLATES } from '../group/builtinGroupTemplates'
 import { defaultLanguageForEnvironment, localizeGroupTemplate, localizeRoleTemplate, normalizeLanguage, translateUi } from './i18n'
 
 describe('shared i18n configuration', () => {
@@ -21,6 +22,24 @@ describe('shared i18n configuration', () => {
     expect(translateUi('9 个群聊 · 311 个人员库人员', 'tr')).toBe('9 sohbet · 311 kayıtlı rol')
     expect(translateUi('进行中', 'zh-CN')).toBe('进行中')
     expect(translateUi('9 个群聊 · 311 个人员库人员', 'en')).toBe('9 chats · 311 people')
+  })
+
+  it('has meaningful Turkish names, descriptions, prompts and audiences for every built-in team role', () => {
+    const han = /[\u3400-\u9fff]/
+    for (const template of BUILTIN_GROUP_TEMPLATES) {
+      const translated = localizeGroupTemplate(template, 'tr')
+      expect(translated.name, template.id).not.toMatch(han)
+      expect(translated.name, template.id).not.toBe('Uzman Ekibi')
+      expect(translated.category, template.id).not.toMatch(han)
+      expect(translated.userTypes, template.id).toHaveLength(template.userTypes.length)
+      expect(translated.userTypes.every(label => !han.test(label)), template.id).toBe(true)
+      for (const role of translated.roles) {
+        expect(role.name, template.id).not.toMatch(han)
+        expect(role.name, template.id).not.toMatch(/Uzmanı \d+$/)
+        expect(role.description, template.id).not.toMatch(han)
+        expect(role.systemPrompt, template.id).not.toMatch(han)
+      }
+    }
   })
 
   it('uses consistent Turkish language for built-in teams and their roles', () => {

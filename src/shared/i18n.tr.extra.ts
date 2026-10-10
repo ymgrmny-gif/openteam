@@ -1,5 +1,6 @@
 /** Turkish terms for reusable roles and orchestration templates. */
 import { TR_ROLE_NAMES_EXTRA } from './i18n.tr.roles'
+import { TR_ADVISORS } from './i18n.tr.advisors'
 export const TR_CATEGORIES: Record<string,string> = {
   "全部": "Tümü",
   "思想风格顾问": "Düşünce ve yaşam danışmanları",
@@ -135,6 +136,7 @@ export const TR_ROLE_NAMES: Record<string,string> = {
   "反方观点分析师": "Karşı Görüş Analisti"
 }
 export const TR_ROLE_LIBRARY: Record<string,{name:string,description:string}> = {
+  ...TR_ADVISORS,
   "default-custom-product-manager": {
     "name": "Ürün Yöneticisi",
     "description": "Kullanıcı ihtiyaçlarını, öncelikleri, seçenekleri ve ürün deneyimini değerlendirir."
@@ -211,6 +213,15 @@ export function trGroupQuestions(name: string): string[] {
 export function trRoleDescription(name: string, groupName: string): string {
   return `${name}, ${groupName} kapsamında somut analiz, öneriler, risk değerlendirmesi ve uygulanabilir sonraki adımlar sunar.`
 }
+export function trAdvisorPrompt(name: string, description: string): string {
+  return [
+    `${name} ile ilişkilendirilen kamuya açık fikirlerden esinlenen yapay zekâ danışmanısın.`,
+    'Bu kişi ya da kuruluşun kendisi olduğunu iddia etme; sözlerini veya görüşlerini doğrudan alıntıymış gibi uydurma.',
+    description,
+    'Durumu somut olarak değerlendir, bildiklerinle varsayımlarını ayır ve uygulanabilir seçenekler sun. Kullanıcı farklı bir dil istemedikçe doğal Türkçe yanıt ver.',
+  ].join('\n\n')
+}
+
 export function trRolePrompt(name: string, description: string): string {
   return [
     `Rolün: ${name}.`,
