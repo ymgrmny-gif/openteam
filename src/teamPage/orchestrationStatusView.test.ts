@@ -108,6 +108,19 @@ function baseFixture(status: OrchestrationRun['status'] = 'running') {
 }
 
 describe('orchestration status view', () => {
+  it('shows blocked project reasons from the snapshot without unsafe resend or skip actions', () => {
+    const fixture = baseFixture('error')
+    const run = fixture.store.orchestrationRunsById['run-1']
+    run.flowSnapshot = { ...fixture.store.orchestrationFlowsById['flow-1'], project: { id: 'p', chatId: 'chat-1', managerRoleId: 'm', reviewerRoleId: 'v', tasks: [], maxAttempts: 3 } }
+    run.error = 'BLOCKED: original source reconciliation required'
+    delete fixture.store.orchestrationFlowsById['flow-1']
+    const view = createOrchestrationStatusView({ getStore: () => fixture.store, getCurrentChat: () => fixture.chat, getCurrentRoles: () => fixture.roles, reconnectRolesForSend: vi.fn(async () => undefined), runCommand: vi.fn(async () => undefined), showError: vi.fn() })
+    const rendered = view.renderOrchestrationStatus()
+    expect(rendered?.textContent).toContain('Project blocked')
+    expect(rendered?.textContent).toContain(run.error)
+    expect(findButton(rendered, '重发')).toBeUndefined()
+    expect(findButton(rendered, '跳过节点')).toBeUndefined()
+  })
   it('renders active run as a floating card with progress, site labels, and a mini graph', () => {
     const fixture = baseFixture('running')
     const view = createOrchestrationStatusView({

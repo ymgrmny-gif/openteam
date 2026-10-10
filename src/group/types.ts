@@ -110,6 +110,7 @@ export interface OrchestrationStage {
   position?: OrchestrationGraphNodePosition
   roleIds: string[]
   review?: OrchestrationReviewConfig
+  projectTaskId?: string
 }
 
 export interface OrchestrationGraphNodePosition {
@@ -154,6 +155,26 @@ export interface OrchestrationFlow {
   maxRounds: number
   createdAt: number
   updatedAt: number
+  project?: ProjectBacklog
+}
+
+export interface ProjectBacklog {
+  id: string
+  chatId: string
+  managerRoleId: string
+  reviewerRoleId: string
+  tasks: ProjectBacklogTask[]
+  maxAttempts: number
+}
+
+export interface ProjectBacklogTask {
+  id: string
+  instruction: string
+  acceptance: string
+  ownerRoleId: string
+  branch: string
+  worktree: string
+  dependsOn: string[]
 }
 
 export interface OrchestrationReviewResult {
@@ -203,6 +224,8 @@ export interface OrchestrationRun {
   updatedAt: number
   completedAt?: number
   error?: string
+  flowSnapshot?: OrchestrationFlow
+  pendingStageIndices?: number[]
 }
 
 export interface GroupChat {

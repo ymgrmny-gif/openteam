@@ -1,5 +1,17 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / Manager sonlu proje döngüsü
+
+- [x] Tek `task.post` ile kayıtlı orchestration run arasındaki eksik backlog/otomatik devam sınırı kodda doğrulandı.
+- [x] Mevcut FSM üzerinde `project.start/read/pause/resume`, Manager → tek sahipli Engineer → IndependentReviewer → sonraki görev zinciri uygulandı.
+- [x] REWORK aynı işe dönüyor; bağımsız kaynak/teslim kimliği + evidence kapısı, sonlu deneme bütçesi, mantıksal branch/worktree sahipliği ve çapraz oda çakışma engeli eklendi.
+- [x] Kalıcı geçiş kuyruğu, immutable flow snapshot, startup/alarm recovery, iki crash checkpoint regresyonu, duplicate/stale response koruması ve belirsiz gönderimi yeniden göndermeme eklendi.
+- [x] Pause devam eden dış aracı iptal etmeden kaynak kimliğini koruyor; resume orijinal yanıtı kullanıyor. Blocked durumunda açıklama ve manuel kaynak uzlaştırması gerekiyor.
+- [ ] Canlı Chrome extension reload + iki gerçek işli proje E2E + canlı reload-resume kabulü: **BLOCKED**, Chrome browser bağlantısı yok; kurulu uzantıda yeni project capabilities henüz yok. Sentetik testler canlı kabul değildir.
+- [ ] RD2 sonlu backlog/kabul ölçütleri kullanıcı tarafından verilerek yeni girişten başlatılmalı; eski smoke mesajları izin/backlog yerine kullanılmaz. Tarihi pending prompt yeniden gönderilmedi.
+- [x] Handoff ve uygulama sınırları: `docs/MANAGER_PROJECT_LOOP.md`. Upstream push/merge ve RemoteDesktopV2 değişikliği yok.
+- [x] Nihai `npm run verify` EXIT0: TypeScript PASS, Vitest **736/736** (86 dosya) PASS, Vite production build PASS. Sandbox localhost EACCES nedeniyle tam testler localhost erişimi açık çalıştırıldı.
+
 ## 2026-10-10 / Otomatik sohbet devri ve kurtarma
 
 - [x] Ayrı `feat/openteam-chat-handoff-20261010` branch ve mevcut çalışma dosyalarını koruma.

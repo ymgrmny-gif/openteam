@@ -81,6 +81,140 @@ async function setupRuntime(
 }
 
 describe('orchestration runtime', () => {
+  it('prevents a second chat from claiming an unfinished project worktree', async () => {
+    const runtime = await projectRuntime()
+    await runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    const saved = await runtime.getStore()
+    saved.chatsById['chat-2'] = makeChat('chat-2', ['m2', 'a2', 'v2'])
+    saved.chatOrder.push('chat-2')
+    for (const roleId of ['m2', 'a2', 'v2']) saved.rolesById[roleId] = makeRole('chat-2', roleId)
+    const { compileProjectBacklog } = await import('../group/projectBacklog')
+    saved.orchestrationFlowsById['project-other'] = compileProjectBacklog({ id: 'other', chatId: 'chat-2', managerRoleId: 'm2', reviewerRoleId: 'v2', tasks: [{ ...projectInput().tasks[0], ownerRoleId: 'a2', branch: 'codex/other' }] }, 1)
+    const second = await setupRuntime(saved, { runtimeFrames: readyProjectFrames() })
+    await expect(second.startOrchestrationRun(second.deps, { chatId: 'chat-2', flowId: 'project-other', task: 'Claim same worktree' })).rejects.toThrow('another unfinished project')
+    expect(second.sendPrompt).not.toHaveBeenCalled()
+  })
+
+  it('bounds REWORK attempts and blocks missing frames before any send', async () => {
+    const runtime = await projectRuntime()
+    await runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await persistProjectReply(runtime.deps, 'manager', 'assignment')
+      await persistProjectReply(runtime.deps, 'a', 'delivery')
+      await persistProjectReply(runtime.deps, 'reviewer', JSON.stringify({ decision: 'fail', reason: 'Test fails', failedCriteria: ['test'], nextRoundInstruction: 'Repair test' }))
+    }
+    expect(Object.values((await runtime.getStore()).orchestrationRunsById)[0].status).toBe('error')
+    expect(runtime.sendPrompt).toHaveBeenCalledTimes(9)
+    const fresh = await projectRuntime()
+    fresh.deps.runtimeFrames = { getByRole: vi.fn(() => undefined) }
+    fresh.deps.waitForRetry = vi.fn().mockResolvedValue(undefined)
+    const started = await fresh.startOrchestrationRun(fresh.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    expect(started.run.status).toBe('error')
+    expect(started.run.error).toContain('BLOCKED')
+    expect(fresh.sendPrompt).not.toHaveBeenCalled()
+    expect(fresh.deps.waitForRetry).toHaveBeenCalledTimes(3)
+  })
+
+  it('holds the writer lease, rejects project replay/skip, and pauses safely', async () => {
+    const runtime = await projectRuntime()
+    const started = await runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    const { retryOrchestrationStage, skipOrchestrationStage, stopOrchestrationRun, recoverOrchestrationRuns, resumeOrchestrationRun } = await import('./orchestrationRuntime')
+    await expect(retryOrchestrationStage(runtime.deps, 'chat-1')).rejects.toThrow('cannot be replayed')
+    await expect(skipOrchestrationStage(runtime.deps, 'chat-1')).rejects.toThrow('cannot be skipped')
+    await stopOrchestrationRun(runtime.deps, 'chat-1')
+    await recoverOrchestrationRuns(runtime.deps)
+    const { mutateStore } = await import('./storeAccess')
+    await mutateStore(store => { store.orchestrationFlowsById.unrelated = { ...makeFlow('chat-1', [{ id: 'unrelated', kind: 'roles', name: 'Unrelated', roleIds: ['b'] }]), id: 'unrelated' } })
+    await expect(runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'unrelated', task: 'Overwrite paused lease' })).rejects.toThrow('unfinished project owns')
+    await persistProjectReply(runtime.deps, 'manager', 'assignment while paused')
+    expect(runtime.sendPrompt).toHaveBeenCalledTimes(1)
+    expect((await runtime.getStore()).orchestrationRunsById[started.run.id].status).toBe('stopped')
+    await resumeOrchestrationRun(runtime.deps, { chatId: 'chat-1', runId: started.run.id })
+    expect(runtime.sendPrompt).toHaveBeenCalledTimes(2)
+    expect((await runtime.getStore()).orchestrationRunsById[started.run.id].stageRuns[0].status).toBe('completed')
+  })
+
+  it('automatically runs finite Manager -> worker -> Reviewer -> next task, REWORK and completion without duplicate dispatch', async () => {
+    const harness = await setupBackground(makeStore(['manager', 'a', 'b', 'reviewer']))
+    for (const [index, roleId] of ['manager', 'a', 'b', 'reviewer'].entries()) {
+      await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId }, { tab: { id: 101 + index } as chrome.tabs.Tab, frameId: index + 1, url: 'https://gemini.google.com/app/test' })
+    }
+    const project = projectInput()
+    const start = await harness.invoke({ type: 'GROUP_PROJECT_START', project }) as { ok: boolean; run: { id: string } }
+    expect(start.ok).toBe(true)
+    const duplicate = await harness.invoke({ type: 'GROUP_PROJECT_START', project }) as { run: { id: string } }
+    expect(duplicate.run.id).toBe(start.run.id)
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(1)
+    const reply = async (roleId: string, content: string) => {
+      const messageId = lastPromptMessageId(harness.tabsSendMessage)
+      return harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId, messageId, content })
+    }
+    await reply('manager', 'Concrete assignment one')
+    expect(promptCalls(harness.tabsSendMessage).slice(-1)[0]?.[1].content).toContain('Concrete assignment one')
+    const worker = await reply('a', 'Delivered files, actual tests exit 0 and commit abc') as { message: { id: string } }
+    const oldWorkerPrompt = promptCalls(harness.tabsSendMessage)[1][1].messageId
+    await reply('reviewer', JSON.stringify({ decision: 'fail', reason: 'Missing negative test', failedCriteria: ['negative'], nextRoundInstruction: 'Add negative test' }))
+    expect(promptCalls(harness.tabsSendMessage).slice(-1)[0]?.[1].roleId).toBe('manager')
+    expect(promptCalls(harness.tabsSendMessage).slice(-1)[0]?.[1].content).toContain('Add negative test')
+    await reply('manager', 'Repair assignment')
+    const repaired = await reply('a', 'Real negative test exit 0, source readback, commit def') as { message: { id: string } }
+    const stale = await harness.invoke({ type: 'TEAM_ROLE_REPLY', chatId: 'chat-1', roleId: 'a', messageId: oldWorkerPrompt, content: 'late old result' }) as { ignored: boolean }
+    expect(stale.ignored).toBe(true)
+    await reply('reviewer', projectPass('one', repaired.message.id))
+    expect(promptCalls(harness.tabsSendMessage).slice(-1)[0]?.[1].roleId).toBe('manager')
+    expect(promptCalls(harness.tabsSendMessage).slice(-1)[0]?.[1].content).toContain('Task two')
+    await reply('manager', 'Assignment two')
+    const second = await reply('b', 'Delivered second task source/test/Git proof') as { message: { id: string } }
+    await reply('reviewer', projectPass('two', second.message.id))
+    const final = await harness.getStore()
+    expect(final.orchestrationRunsById[start.run.id].status).toBe('completed')
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(9)
+    expect(worker.message.id).not.toBe(repaired.message.id)
+  })
+
+  it('blocks uncorrelated PASS and never advances a delivery without a persisted completed source reply', async () => {
+    const { deps, startOrchestrationRun, getStore } = await projectRuntime()
+    const { maybeAdvanceOrchestrationRun } = await import('./orchestrationRuntime')
+    const start = await startOrchestrationRun(deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    const first = latestUserMessage(await getStore(), 'chat-1')
+    await maybeAdvanceOrchestrationRun(deps, { chatId: 'chat-1', roleId: 'manager', promptMessageId: first.id })
+    expect((await getStore()).orchestrationRunsById[start.run.id].stageRuns[0].status).toBe('running')
+    await persistProjectReply(deps, 'manager', 'assignment')
+    await persistProjectReply(deps, 'a', 'delivery')
+    await persistProjectReply(deps, 'reviewer', projectPass('one', 'wrong-source'))
+    expect((await getStore()).orchestrationRunsById[start.run.id]).toMatchObject({ status: 'error', error: expect.stringContaining('correlated') })
+  })
+
+  it('recovers a crash after transition checkpoint exactly once using a new runtime, and keeps an immutable flow', async () => {
+    const runtime = await projectRuntime()
+    const start = await runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    runtime.deps.broadcastStoreUpdated = vi.fn().mockRejectedValue(new Error('simulated crash'))
+    await expect(persistProjectReply(runtime.deps, 'manager', 'assignment')).rejects.toThrow('simulated crash')
+    const saved = await runtime.getStore()
+    expect(saved.orchestrationRunsById[start.run.id].pendingStageIndices).toEqual([1])
+    saved.orchestrationFlowsById['project-test'].stages = []
+    const restarted = await setupRuntime(saved, { runtimeFrames: readyProjectFrames(), newId: prefix => `${prefix}-restarted-${Math.random()}` })
+    const { recoverOrchestrationRuns } = await import('./orchestrationRuntime')
+    await Promise.all([recoverOrchestrationRuns(restarted.deps), recoverOrchestrationRuns(restarted.deps)])
+    await recoverOrchestrationRuns(restarted.deps)
+    expect(restarted.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(restarted.sendPrompt.mock.calls[0]).toBeDefined()
+    expect((await restarted.getStore()).orchestrationRunsById[start.run.id].stageRuns.map(sr => sr.stageId)).toEqual(['task-0-manager', 'task-0-worker'])
+  })
+
+  it('reconciles a persisted reply after reload and blocks an uncertain send without any automatic resend', async () => {
+    const runtime = await projectRuntime()
+    await runtime.startOrchestrationRun(runtime.deps, { chatId: 'chat-1', flowId: 'project-test', task: 'Finite backlog' })
+    await persistProjectReply(runtime.deps, 'manager', 'assignment', false)
+    const saved = await runtime.getStore()
+    const restarted = await setupRuntime(saved, { runtimeFrames: readyProjectFrames(), newId: prefix => `${prefix}-restart`, sendPrompt: vi.fn().mockRejectedValue(new Error('ACK lost')) })
+    const { recoverOrchestrationRuns } = await import('./orchestrationRuntime')
+    await recoverOrchestrationRuns(restarted.deps)
+    await recoverOrchestrationRuns(restarted.deps)
+    expect(restarted.deps.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(Object.values((await restarted.getStore()).orchestrationRunsById)[0]).toMatchObject({ status: 'error', error: expect.stringContaining('no resend') })
+  })
+
   it('runs role stages in order and completes when all parallel roles reply', async () => {
     const store = makeStore(['role-1', 'role-2'])
     store.orchestrationFlowsById['flow-1'] = makeFlow('chat-1', [
@@ -807,6 +941,47 @@ type PromptCall = [number, { type?: string; roleId: string; messageId: string; c
 
 function promptCalls(mock: ReturnType<typeof vi.fn>): PromptCall[] {
   return mock.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT') as PromptCall[]
+}
+
+function projectInput() {
+  return { id: 'test', chatId: 'chat-1', managerRoleId: 'manager', reviewerRoleId: 'reviewer', tasks: [
+    { id: 'one', instruction: 'Build one', acceptance: 'Source/test/Git verified', ownerRoleId: 'a', branch: 'codex/a', worktree: 'C:/work/a' },
+    { id: 'two', instruction: 'Build two', acceptance: 'Source/test/Git verified', ownerRoleId: 'b', branch: 'codex/b', worktree: 'C:/work/b', dependsOn: ['one'] },
+  ] }
+}
+
+function projectPass(taskId: string, workerMessageId: string) {
+  return JSON.stringify({ decision: 'pass', reason: 'Independent acceptance verified', failedCriteria: [], nextRoundInstruction: '', taskId, workerMessageId, verified: true, evidence: ['source readback', 'tests exit 0', 'Git SHA and ownership verified'] })
+}
+
+function readyProjectFrames() {
+  return { getByRole: vi.fn((_chatId: string, roleId: string) => ({ chatId: 'chat-1', roleId, tabId: 101, frameId: 1, ready: true, lastSeenAt: 1 })) }
+}
+
+async function projectRuntime() {
+  const { compileProjectBacklog } = await import('../group/projectBacklog')
+  const store = makeStore(['manager', 'a', 'b', 'reviewer'])
+  store.orchestrationFlowsById['project-test'] = compileProjectBacklog(projectInput(), 1)
+  return setupRuntime(store, { runtimeFrames: readyProjectFrames() })
+}
+
+async function persistProjectReply(deps: import('./orchestrationRuntime').OrchestrationRuntimeDependencies, roleId: string, content: string, advance = true) {
+  const { mutateStore } = await import('./storeAccess')
+  const stored = await mutateStore(store => {
+    const prompt = latestUserMessage(store, 'chat-1')
+    const chat = store.chatsById['chat-1']
+    const reply = { id: deps.newId('reply'), chatId: chat.id, seq: chat.nextMessageSeq++, type: 'assistant' as const, roleId, sourceMessageId: prompt.id, content, status: 'received' as const, createdAt: deps.now() }
+    store.messagesById[reply.id] = reply
+    chat.messageIds.push(reply.id)
+    prompt.deliveryStatus![roleId] = 'received'
+    store.rolesById[roleId].status = 'ready'
+    delete store.rolesById[roleId].lastPromptMessageId
+    return reply
+  })
+  if (advance) {
+    const { maybeAdvanceOrchestrationRun } = await import('./orchestrationRuntime')
+    await maybeAdvanceOrchestrationRun(deps, { chatId: 'chat-1', roleId, promptMessageId: stored.result.sourceMessageId, replyMessage: stored.result })
+  }
 }
 
 function firstPromptMessageId(mock: ReturnType<typeof vi.fn>): string {

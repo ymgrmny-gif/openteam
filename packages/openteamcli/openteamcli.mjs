@@ -72,6 +72,13 @@ export function buildCliRequest(argv) {
     })
   }
 
+  if (group === 'project') {
+    if (subcommand === 'start') return { kind: 'file-command', action: 'project.start', file: requireOption(options, 'file') }
+    if (subcommand === 'read') return command('project.read', { chatId: requireOption(options, 'chat'), id: requireOption(options, 'id') })
+    if (subcommand === 'pause') return command('project.pause', { chatId: requireOption(options, 'chat') })
+    if (subcommand === 'resume') return command('project.resume', { chatId: requireOption(options, 'chat') })
+  }
+
   if (group === 'run' && subcommand === 'create-and-post') {
     return {
       kind: 'file-command',
@@ -327,6 +334,10 @@ export function help() {
       'openteamcli chat list|get|create|activate|initialize',
       'openteamcli role batch-add --chat <chatId> --file roles.json',
       'openteamcli task post|wait|read',
+      'openteamcli project start --file backlog.json',
+      'openteamcli project read --chat <id> --id <projectId>',
+      'openteamcli project pause --chat <id>',
+      'openteamcli project resume --chat <id>',
       'openteamcli run create-and-post --file task.json --wait',
       'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
     ],

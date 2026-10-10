@@ -94,3 +94,7 @@ For a beta release:
 ```bash
 npm publish --tag beta --access public
 ```
+
+## Finite project execution
+
+Use `openteamcli project start --file backlog.json` for an explicitly authorized finite Manager/writer/reviewer backlog. Ordinary `task post` remains a single task. Read progress with `project read --chat <chatId> --id <projectId>`; `project pause|resume --chat <chatId>` preserves original delivery correlation. See [project backlog contract and acceptance gates](../../docs/MANAGER_PROJECT_LOOP.md).

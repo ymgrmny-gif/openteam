@@ -9,6 +9,11 @@ import { buildCliRequest, help } from './openteamcli.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 describe('openteamcli command builder', () => {
+  it('builds finite project start, read and pause commands', () => {
+    expect(buildCliRequest(['project', 'start', '--file', 'backlog.json'])).toMatchObject({ kind: 'file-command', action: 'project.start', file: 'backlog.json' })
+    expect(buildCliRequest(['project', 'read', '--chat', 'chat-1', '--id', 'p'])).toMatchObject({ command: { action: 'project.read', payload: { chatId: 'chat-1', id: 'p' } } })
+    expect(buildCliRequest(['project', 'pause', '--chat', 'chat-1'])).toMatchObject({ command: { action: 'project.pause', payload: { chatId: 'chat-1' } } })
+  })
   it('builds doctor and daemon commands', () => {
     expect(buildCliRequest(['doctor'])).toEqual({ kind: 'doctor' })
     expect(buildCliRequest(['daemon', 'status'])).toEqual({ kind: 'daemon-status' })
@@ -66,6 +71,10 @@ describe('openteamcli command builder', () => {
         'openteamcli chat list|get|create|activate|initialize',
         'openteamcli role batch-add --chat <chatId> --file roles.json',
         'openteamcli task post|wait|read',
+        'openteamcli project start --file backlog.json',
+        'openteamcli project read --chat <id> --id <projectId>',
+        'openteamcli project pause --chat <id>',
+        'openteamcli project resume --chat <id>',
         'openteamcli run create-and-post --file task.json --wait',
         'openteamcli agent list|run --agent <id> --content <prompt> --cwd <path>',
       ],

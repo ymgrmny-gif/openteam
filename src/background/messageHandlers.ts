@@ -83,6 +83,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
 
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      const activeProject = Object.values(store.orchestrationRunsById).find(run => run.chatId === chatId && run.flowSnapshot?.project && run.status !== 'completed')
+      if (activeProject) throw new Error('Project owns this chat; use a separate chat for unrelated tasks')
       const roles = getChatRoles(store, chat)
       const parsed = parseGroupMentions(raw, roles, { ...roleMentionLabelOptionsFromSettings(store.settings), defaultTarget: defaultMentionTargetForMessage(raw, chat) })
       if (!parsed.ok) throw new Error(parsed.error)
@@ -262,6 +264,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const retryTarget = resolveRetryTarget(store, chat, role, requestedMessageId, deps.log)
       const userMessage = retryTarget?.userMessage
       if (!userMessage) throw new Error(requestedMessageId ? '该消息没有发送给这个人员' : '找不到可重试的用户消息')
+      if (userMessage.orchestrationRunId && store.orchestrationRunsById[userMessage.orchestrationRunId]?.flowSnapshot?.project) throw new Error('Project prompts cannot be resent; reconcile the original source reply')
       if (retryTarget?.discardMessageId) {
         discardedAttachmentIds = readyAttachmentIds(store.messagesById[retryTarget.discardMessageId]?.attachments)
         discardMessage(store, chat, retryTarget.discardMessageId)
@@ -1006,6 +1009,7 @@ async function prepareRoleErrorRetry(
     if (staleReason) return undefined
     const userMessage = store.messagesById[promptMessageId]
     if (!isUserMessageForRole(userMessage, chat, role)) return undefined
+    if (userMessage.orchestrationRunId && store.orchestrationRunsById[userMessage.orchestrationRunId]?.flowSnapshot?.project) return undefined
     if (userMessage.deliveryStatus?.[role.id] !== 'sent') return undefined
     if (hasAssistantReplyAfterPrompt(store, chat, role, promptMessageId)) return undefined
 

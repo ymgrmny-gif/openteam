@@ -17,6 +17,7 @@ import { createExternalModelClient } from './externalModelClient'
 import { createPromptSender } from './promptDelivery'
 import { createRoleHandlers } from './roleHandlers'
 import { createOrchestrationHandlers, type OrchestrationAutoStreamMessage } from './orchestrationHandlers'
+import { recoverOrchestrationRuns } from './orchestrationRuntime'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
 import { createSitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatRoles, mutateStore } from './storeAccess'
@@ -246,7 +247,15 @@ chrome.runtime.onStartup?.addListener(() => {
 chrome.alarms?.onAlarm?.addListener(alarm => {
   if (alarm.name !== CONTROL_KEEPALIVE_ALARM) return
   syncControlClient().catch(error => log.warn('control-client:keepalive-sync-failed', { error: errorReason(error) }))
+  wakeOrchestration()
 })
+
+function wakeOrchestration(): void {
+  recoverOrchestrationRuns({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt })
+    .catch(error => logBackgroundFailure('orchestration:recovery-failed', error))
+}
+
+wakeOrchestration()
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendResponse) => {
   try {

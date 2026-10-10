@@ -23,6 +23,7 @@ import type { ExternalModelClient, ExternalModelCompletionInput } from './extern
 import type { BackgroundMessageRoute } from './messageRouter'
 import { type RuntimeMessage } from './runtimeClient'
 import { getChatRoles, mutateStore, requireChat } from './storeAccess'
+import { compileProjectBacklog } from '../group/projectBacklog'
 import {
   type OrchestrationRuntimeDependencies,
   resumeOrchestrationRun,
@@ -125,6 +126,24 @@ export function createOrchestrationHandlers(deps: OrchestrationHandlersDependenc
   }
 
   return [
+    {
+      type: 'GROUP_PROJECT_START',
+      handler: async message => {
+        const flow = compileProjectBacklog(message.project, deps.now())
+        await mutateStore(store => {
+          const existing = store.orchestrationFlowsById[flow.id]
+          if (existing && JSON.stringify(existing.project) !== JSON.stringify(flow.project)) throw new Error('Project id already belongs to a different backlog')
+          const chat = requireChat(store, flow.chatId)
+          for (const roleId of [flow.project!.managerRoleId, flow.project!.reviewerRoleId, ...flow.project!.tasks.map(task => task.ownerRoleId)]) {
+            if (!chat.roleIds.includes(roleId) || !store.rolesById[roleId]) throw new Error(`Project role unavailable: ${roleId}`)
+          }
+          store.orchestrationFlowsById[flow.id] = existing ?? flow
+          const order = store.orchestrationFlowOrderByChatId[flow.chatId] ?? []
+          store.orchestrationFlowOrderByChatId[flow.chatId] = [...new Set([...order, flow.id])]
+        })
+        return { ok: true, ...(await startOrchestrationRun(deps, { chatId: flow.chatId, flowId: flow.id, task: `Execute authorized project ${flow.project!.id}. Only the current task is leased; acceptance gates all later work.` })) }
+      },
+    },
     { type: 'GROUP_ORCHESTRATION_FLOW_SAVE', handler: handleFlowSave },
     { type: 'GROUP_ORCHESTRATION_FLOW_DELETE', handler: handleFlowDelete },
     { type: 'GROUP_ORCHESTRATION_AUTO_GENERATE', handler: handleAutoGenerate },

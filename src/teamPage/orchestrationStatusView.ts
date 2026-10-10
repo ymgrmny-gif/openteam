@@ -76,7 +76,7 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     const store = deps.getStore()
     const visible = getVisibleRun(store, chat.id)
     if (!visible) return undefined
-    const flow = store.orchestrationFlowsById[visible.run.flowId]
+    const flow = visible.run.flowSnapshot ?? store.orchestrationFlowsById[visible.run.flowId]
     if (!flow) return undefined
     const prefs = readPrefs(chat.id)
     if (prefs.collapsed) return renderCollapsed(chat, visible.run, flow, prefs)
@@ -104,6 +104,12 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     const card = document.createElement('section')
     card.className = `orchestration-status orchestration-status-floating orchestration-status-${run.status}`
     card.dataset.runId = run.id
+    if (flow.project && run.error) {
+      const reason = document.createElement('p')
+      reason.className = 'orchestration-status-error'
+      reason.textContent = run.error
+      card.append(reason)
+    }
     card.setAttribute('aria-label', '编排运行状态')
     applyFloatingPosition(card, prefs, { width: DEFAULT_CARD_WIDTH, height: DEFAULT_CARD_HEIGHT })
 
@@ -117,6 +123,7 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
     const titleText = document.createElement('span')
     
     let statusLabel = STATUS_LABELS[run.status]
+    if (flow.project) statusLabel = run.status === 'error' ? 'Project blocked' : run.status === 'stopped' ? 'Project paused' : `Project ${run.status}`
     if (run.status === 'running' && run.updatedAt) {
       const staleThreshold = 10 * 60 * 1000
       if (Date.now() - run.updatedAt > staleThreshold) {
@@ -227,6 +234,11 @@ export function createOrchestrationStatusView(deps: OrchestrationStatusViewDepen
   function renderActions(chat: GroupChat, run: OrchestrationRun, flow: OrchestrationFlow, current: OrchestrationStageRun | undefined): HTMLElement | undefined {
     const actions = document.createElement('div')
     actions.className = 'orchestration-status-actions'
+    if (flow.project) {
+      if (run.status === 'running' || run.status === 'pending') actions.append(actionButton('Pause project', 'btn-ghost', () => runAction('GROUP_ORCHESTRATION_STOP', { chatId: chat.id })))
+      if (run.status === 'stopped') actions.append(actionButton('Resume project', 'btn-primary', () => runAction('GROUP_ORCHESTRATION_RESUME', { chatId: chat.id, runId: run.id })))
+      return actions.childElementCount ? actions : undefined
+    }
     if (run.status === 'stopped') {
       actions.append(actionButton('继续', 'btn-primary', () => resumeAction(chat, run, flow)))
       actions.append(actionButton('重新运行', 'btn-ghost', () => rerunAction(chat, run, flow)))

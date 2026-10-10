@@ -73,6 +73,19 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return batchAddRoles(command.payload, deps)
     case 'task.post':
       return postTask(command.payload, initialStore, deps)
+    case 'project.start':
+      return routeOk(deps, { type: 'GROUP_PROJECT_START', project: command.payload })
+    case 'project.pause':
+      return routeOk(deps, { type: 'GROUP_ORCHESTRATION_STOP', chatId: requirePayloadString(command.payload, 'chatId') })
+    case 'project.resume':
+      return routeOk(deps, { type: 'GROUP_ORCHESTRATION_RESUME', chatId: requirePayloadString(command.payload, 'chatId') })
+    case 'project.read': {
+      const chatId = requirePayloadString(command.payload, 'chatId')
+      const projectId = requirePayloadString(command.payload, 'id')
+      const run = Object.values(initialStore.orchestrationRunsById).find(item => item.chatId === chatId && item.flowSnapshot?.project?.id === projectId)
+      if (!run) throw new Error('Project not found')
+      return { projectId, status: run.status === 'error' ? 'blocked' : run.status === 'stopped' ? 'paused' : run.status, reason: run.error, run }
+    }
     case 'task.read':
       return readTaskResult(initialStore, requirePayloadString(command.payload, 'chatId'), requirePayloadString(command.payload, 'messageId'))
     case 'task.wait':

@@ -87,11 +87,27 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
     const chat = requireChat(store, input.chatId)
     const flow = requireFlow(store, chat.id, input.flowId)
     validateExecutableFlow(store, chat, flow)
+    if (flow.project) {
+      const previous = Object.values(store.orchestrationRunsById).find(run => run.chatId === chat.id && run.flowSnapshot?.project?.id === flow.project?.id)
+      if (previous) {
+        if (JSON.stringify(previous.flowSnapshot?.project) !== JSON.stringify(flow.project)) throw new Error('Project id already belongs to a different backlog')
+        return { run: previous, stageIndices: [] }
+      }
+      if (getChatRoles(store, chat).some(role => role.status === 'thinking' || role.lastPromptMessageId)) throw new Error('BLOCKED: chat has an in-flight or uncertain role prompt')
+      const resourceKey = (path: string) => path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+      for (const other of Object.values(store.orchestrationRunsById)) {
+        const project = other.flowSnapshot?.project
+        if (!project || other.status === 'completed') continue
+        if (other.chatId === chat.id || project.tasks.some(task => flow.project!.tasks.some(next => resourceKey(next.worktree) === resourceKey(task.worktree) || next.branch.toLowerCase() === task.branch.toLowerCase()))) throw new Error('BLOCKED: another unfinished project owns this chat, branch or worktree; reconcile it first')
+      }
+    }
+    if (Object.values(store.orchestrationRunsById).some(run => run.chatId === chat.id && run.flowSnapshot?.project && run.status !== 'completed')) throw new Error('An unfinished project owns this chat; use a separate chat for unrelated orchestration')
     if (!isTest) {
       const activeRunId = store.activeOrchestrationRunIdByChatId[chat.id]
       const activeRun = activeRunId ? store.orchestrationRunsById[activeRunId] : undefined
       if (activeRun && activeRun.status === 'pending') throw new Error('该群聊已有运行中的编排')
       if (activeRun && activeRun.status === 'running') {
+        if (activeRun.flowSnapshot?.project) throw new Error('Project already owns this chat')
         if (hasLiveRunningRolePrompt(store, chat, activeRun)) throw new Error('该群聊已有运行中的编排')
         stopStaleActiveRun(store, chat, activeRun, timestamp)
       }
@@ -125,6 +141,8 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
       stageRuns: [],
       createdAt: timestamp,
       updatedAt: timestamp,
+      flowSnapshot: structuredClone(flow),
+      pendingStageIndices: rootStageIndices(flow),
     }
     taskMessage.orchestrationRunId = run.id
     taskMessage.orchestrationRound = 1
@@ -154,6 +172,15 @@ export async function stopOrchestrationRun(deps: OrchestrationRuntimeDependencie
     const runId = store.activeOrchestrationRunIdByChatId[chat.id]
     const run = runId ? store.orchestrationRunsById[runId] : undefined
     if (!run) return undefined
+    if (run.flowSnapshot?.project) {
+      if (run.status === 'error') throw new Error('Blocked project requires source reconciliation; pause cannot clear its error')
+      run.status = 'stopped'
+      run.updatedAt = timestamp
+      // Keep the lease and original correlation: an in-flight writer may finish.
+      // Pausing prevents subsequent dispatch, it does not cancel external tools.
+      chat.updatedAt = timestamp
+      return run
+    }
     run.status = 'stopped'
     run.updatedAt = timestamp
     run.completedAt = timestamp
@@ -186,15 +213,17 @@ export async function stopOrchestrationRun(deps: OrchestrationRuntimeDependencie
   return { store: active.store, run: active.result }
 }
 
-export async function detectAndHandleStaleRuns(deps: OrchestrationRuntimeDependencies): Promise<void> {
+export async function detectAndHandleStaleRuns(deps: OrchestrationRuntimeDependencies, checkpointedOnly = false): Promise<void> {
   const timestamp = deps.now()
   const { store, result: staleRunIds } = await mutateStore(store => {
     const stale = Object.values(store.orchestrationRunsById).filter(run => {
-      return run.status === 'running' && (timestamp - run.updatedAt) > ORCHESTRATION_STALE_TIMEOUT_MS
+      return (!checkpointedOnly || Boolean(run.flowSnapshot)) && (run.status === 'running' || run.status === 'pending') && (timestamp - run.updatedAt) > ORCHESTRATION_STALE_TIMEOUT_MS
     })
     for (const run of stale) {
       run.status = 'error'
-      run.error = `编排运行超时，已自动标记为失败 (最后更新于 ${new Date(run.updatedAt).toLocaleTimeString()})`
+      run.error = run.flowSnapshot?.project
+        ? 'BLOCKED: source completion deadline expired; delivery may have executed. Reconcile original source, never resend.'
+        : `编排运行超时，已自动标记为失败 (最后更新于 ${new Date(run.updatedAt).toLocaleTimeString()})`
       run.completedAt = timestamp
       run.updatedAt = timestamp
       const chat = store.chatsById[run.chatId]
@@ -215,6 +244,24 @@ export async function detectAndHandleStaleRuns(deps: OrchestrationRuntimeDepende
   }
 }
 
+// A wakeup reconciles committed replies and transitions, never replays an
+// uncertain send. The running roleRun is the durable single-writer lease.
+export async function recoverOrchestrationRuns(deps: OrchestrationRuntimeDependencies): Promise<void> {
+  const snapshot = await mutateStore(store => Object.values(store.orchestrationRunsById)
+    .filter(run => (run.status === 'running' || run.status === 'pending') && store.activeOrchestrationRunIdByChatId[run.chatId] === run.id)
+    .map(run => ({ id: run.id, chatId: run.chatId, pending: run.pendingStageIndices ?? [], replies: run.stageRuns.flatMap(sr => Object.values(sr.roleRuns)
+      .filter(rr => sr.status === 'running' && rr.status === 'running')
+      .flatMap(rr => {
+        const reply = Object.values(store.messagesById).find(msg => msg.chatId === run.chatId && msg.type === 'assistant' && msg.roleId === rr.roleId && msg.sourceMessageId === rr.messageId && msg.status === 'received')
+        return reply ? [{ roleId: rr.roleId, promptMessageId: rr.messageId, replyMessage: reply }] : []
+      })) })))
+  for (const run of snapshot.result) {
+    for (const reply of run.replies) await maybeAdvanceOrchestrationRun(deps, { chatId: run.chatId, ...reply })
+    await startStages(deps, run.id, run.pending)
+  }
+  await detectAndHandleStaleRuns(deps, true)
+}
+
 export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependencies, input: { chatId: string; runId?: string }): Promise<{ store: OpenTeamStore; run: OrchestrationRun }> {
   const timestamp = deps.now()
   const prepared = await mutateStore(store => {
@@ -222,7 +269,7 @@ export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependenc
     const run = findResumableRun(store, chat, input.runId)
     if (!run) throw new Error('找不到可继续的编排')
     if (run.status !== 'stopped') throw new Error('只有已停止的编排可以继续')
-    const flow = requireFlow(store, chat.id, run.flowId)
+    const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
     validateExecutableFlow(store, chat, flow)
     const last = currentStageRun(run)
     run.status = 'running'
@@ -232,9 +279,14 @@ export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependenc
     store.activeOrchestrationRunIdByChatId[chat.id] = run.id
     chat.status = 'running'
     chat.updatedAt = timestamp
-    if (!last) return { run, stageIndices: rootStageIndices(flow) }
+    if (run.flowSnapshot?.project) return { run, stageIndices: run.pendingStageIndices ?? [] }
+    if (!last) {
+      run.pendingStageIndices = rootStageIndices(flow)
+      return { run, stageIndices: run.pendingStageIndices }
+    }
     if (last.status === 'skipped' || last.status === 'error' || last.status === 'pending' || last.status === 'running') {
       removeStageRunAndFollowing(run, last)
+      run.pendingStageIndices = [last.stageIndex]
       return { run, stageIndices: [last.stageIndex] }
     }
     const next = nextStageDecision(store, chat, run, last, timestamp)
@@ -242,6 +294,7 @@ export async function resumeOrchestrationRun(deps: OrchestrationRuntimeDependenc
   })
   await deps.broadcastStoreUpdated(prepared.store)
   if (prepared.result.stageIndices.length > 0) await startStages(deps, prepared.result.run.id, prepared.result.stageIndices)
+  if (prepared.result.run.flowSnapshot?.project) await recoverOrchestrationRuns(deps)
   const latest = await mutateStore(store => store.orchestrationRunsById[prepared.result.run.id])
   return { store: latest.store, run: latest.result }
 }
@@ -259,6 +312,34 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
     if (!stageRun || stageRun.status !== 'running') return { next: false as const }
     const roleRun = stageRun.roleRuns[input.roleId]
     if (!roleRun || roleRun.messageId !== promptMessageId || roleRun.status !== 'running') return { next: false as const }
+    const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
+    if (flow.project) {
+      const reply = input.replyMessage && store.messagesById[input.replyMessage.id]
+      const prompt = store.messagesById[promptMessageId]
+      if (!reply || reply.type !== 'assistant' || reply.chatId !== chat.id || reply.roleId !== input.roleId || reply.sourceMessageId !== promptMessageId || reply.status !== 'received' || !reply.content.trim() || !prompt || reply.createdAt < prompt.createdAt || prompt.deliveryStatus?.[input.roleId] !== 'received') return { next: false as const }
+      input.replyMessage = reply
+      try {
+        const result = JSON.parse(reply.content.replace(/^```(?:json)?\s*|\s*```$/g, ''))
+        if (result.blocked === true) {
+          failRun(store, chat, run, `BLOCKED: ${String(result.reason || 'Role requires user action')}`, timestamp)
+          return { next: false as const }
+        }
+      } catch { /* Non-JSON worker delivery is permitted; review still gates acceptance. */ }
+      if (stageRun.kind === 'review') {
+        const parsed = parseReviewDecision(reply.content)
+        if (parsed.ok && parsed.decision.decision === 'pass') {
+          const evidence = JSON.parse(parsed.decision.rawJson) as Record<string, unknown>
+          const taskId = flow.stages[stageRun.stageIndex]?.projectTaskId
+          const workerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Worker'))
+          const workerPromptId = workerStage && Object.values(workerStage.roleRuns)[0]?.messageId
+          const workerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === workerPromptId && msg.roleId === flow.project?.tasks.find(task => task.id === taskId)?.ownerRoleId && msg.status === 'received')
+          if (!workerReply || evidence.taskId !== taskId || evidence.workerMessageId !== workerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) {
+            failRun(store, chat, run, 'BLOCKED: review PASS lacks correlated independent source/test/Git evidence', timestamp)
+            return { next: false as const }
+          }
+        }
+      }
+    }
     if (input.replyMessage) {
       const persistedReply = store.messagesById[input.replyMessage.id]
       if (persistedReply) {
@@ -359,12 +440,14 @@ export async function retryOrchestrationStage(deps: OrchestrationRuntimeDependen
   const prepared = await mutateStore(store => {
     const chat = requireChat(store, chatId)
     const run = requireActiveRun(store, chat)
+    if (run.flowSnapshot?.project) throw new Error('BLOCKED: project delivery cannot be replayed; reconcile source evidence first')
     const restartingStageRun = findRestartingStageRun(run, stageId)
     if (restartingStageRun) return { runId: run.id, stageIndex: restartingStageRun.stageIndex, alreadyRestarting: true }
     const stageRun = findRetryableStageRun(run, stageId)
     if (!stageRun) throw new Error('找不到可重试的编排节点')
     removeStageRunsAfter(run, stageRun)
     markStageRunRestarting(stageRun, timestamp)
+    run.pendingStageIndices = [stageRun.stageIndex]
     run.status = 'running'
     delete run.error
     delete run.completedAt
@@ -384,6 +467,7 @@ export async function skipOrchestrationStage(deps: OrchestrationRuntimeDependenc
   const advance = await mutateStore(store => {
     const chat = requireChat(store, chatId)
     const run = requireActiveRun(store, chat)
+    if (run.flowSnapshot?.project) throw new Error('Project acceptance stages cannot be skipped')
     const stageRun = findRetryableStageRun(run, stageId)
     if (!stageRun) throw new Error('找不到可跳过的编排节点')
     stageRun.status = 'skipped'
@@ -422,7 +506,9 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     if (!run || (run.status !== 'pending' && run.status !== 'running')) return { deliveries: [], externalDeliveries: [] }
     const chat = requireChat(store, run.chatId)
     if (store.activeOrchestrationRunIdByChatId[chat.id] !== run.id) return { deliveries: [], externalDeliveries: [] }
-    const flow = requireFlow(store, chat.id, run.flowId)
+    const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
+    if (run.pendingStageIndices && !run.pendingStageIndices.includes(stageIndex)) return { deliveries: [], externalDeliveries: [] }
+    if (run.stageRuns.some(sr => sr.stageIndex === stageIndex && sr.status === 'running')) return { deliveries: [], externalDeliveries: [] }
     const stage = flow.stages[stageIndex]
     if (!stage) {
       completeRun(store, chat, run, timestamp)
@@ -436,8 +522,19 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     const taskMessage = getRunTaskMessage(store, chat, run)
     if (!taskMessage) throw new Error('找不到编排任务消息')
     const targetRoleIds = targetRoleIdsForStage(stage)
+    if (flow.project && targetRoleIds.some(roleId => {
+      const role = requireRole(store, chat.id, roleId)
+      return role.status === 'thinking' || Boolean(role.lastPromptMessageId) || role.siteHealth?.status === 'blocked' || role.siteHealth?.status === 'unauthorized' || role.status === 'error'
+    })) {
+      failRun(store, chat, run, 'BLOCKED: task owner is busy, unauthorized or in error; user/source reconciliation required', timestamp)
+      return { deliveries: [], externalDeliveries: [] }
+    }
     const frameBlocker = findLocalRoleFrameBlocker(store, chat, targetRoleIds, deps)
     if (frameBlocker) {
+      if (preparationAttempt >= 3) {
+        failRun(store, chat, run, `BLOCKED: ${frameBlocker.roleName}: ${frameBlocker.reason}`, timestamp)
+        return { deliveries: [], externalDeliveries: [] }
+      }
       return {
         deliveries: [],
         externalDeliveries: [],
@@ -451,6 +548,7 @@ async function startStage(deps: OrchestrationRuntimeDependencies, runId: string,
     }
 
     removePendingStageRun(run, stageIndex)
+    run.pendingStageIndices = run.pendingStageIndices?.filter(index => index !== stageIndex)
     const promptMessage = createStagePromptMessage(deps, store, chat, run, stage, stageIndex, taskMessage.content, timestamp)
     promptMessage.targetRoleIds = targetRoleIds
     promptMessage.mentionedRoleIds = targetRoleIds
@@ -598,6 +696,16 @@ async function sendOrchestrationPromptDelivery(deps: OrchestrationRuntimeDepende
     delivery.message.replyAttemptId,
   )
   if (!stillActive) return false
+  const project = await mutateStore(store => Boolean(store.orchestrationRunsById[store.activeOrchestrationRunIdByChatId[delivery.message.chatId]]?.flowSnapshot?.project))
+  if (project.result) {
+    try {
+      await deps.sendPrompt(delivery)
+      return true
+    } catch (error) {
+      await markOrchestrationRoleError(deps, { chatId: delivery.message.chatId, roleId: delivery.roleId, promptMessageId: delivery.message.messageId, error: `BLOCKED: delivery outcome uncertain; source reconciliation required, no resend: ${error instanceof Error ? error.message : String(error)}` })
+      return false
+    }
+  }
   return sendPromptDeliveryWithRetry({
     log: deps.log,
     sendPrompt: deps.sendPrompt,
@@ -667,9 +775,14 @@ async function sendExternalOrchestrationPrompt(deps: OrchestrationRuntimeDepende
 }
 
 function createStagePromptMessage(deps: OrchestrationRuntimeDependencies, store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stage: OrchestrationStage, stageIndex: number, userTask: string, timestamp: number): GroupMessage {
-  const content = stage.kind === 'review'
+  let content = stage.kind === 'review'
     ? buildOrchestrationReviewMessageContent({ userTask, currentStage: stage, language: store.settings.language })
     : buildOrchestrationRoleMessageContent({ userTask, currentStage: stage, previousReviewResult: lastReviewResult(run), language: store.settings.language })
+  if (run.flowSnapshot?.project) {
+    const source = [...run.stageRuns].reverse().find(sr => sr.status === 'completed' && sr.stageId !== stage.id)
+    const replies = source ? getChatMessages(store, chat).filter(msg => msg.type === 'assistant' && msg.status === 'received' && Object.values(source.roleRuns).some(rr => rr.messageId === msg.sourceMessageId && rr.roleId === msg.roleId)) : []
+    content += `\n\nCompleted source deliveries (read actual artifacts independently):\n${replies.map(reply => JSON.stringify({ messageId: reply.id, roleId: reply.roleId, content: reply.content })).join('\n')}`
+  }
 
   return {
     id: deps.newId('msg'),
@@ -697,16 +810,16 @@ function lastReviewResult(run: OrchestrationRun): OrchestrationReviewResult | un
 }
 
 function nextStageDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, completedStageRun: OrchestrationStageRun, timestamp: number): NextStageDecision {
-  const flow = requireFlow(store, chat.id, run.flowId)
+  const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
   const readyStageIndices = outgoingReadyStageIndices(flow, run, completedStageRun.stageId)
-  if (readyStageIndices.length > 0) return { next: true, runId: run.id, stageIndices: readyStageIndices }
-  if (hasRunningStageRuns(run)) return { next: false }
+  if (readyStageIndices.length > 0) return queueStages(run, readyStageIndices)
+  if (hasRunningStageRuns(run) || run.pendingStageIndices?.length) return { next: false }
   completeRun(store, chat, run, timestamp)
   return { next: false }
 }
 
 function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, stageRun: OrchestrationStageRun, decision: 'pass' | 'fail', timestamp: number): NextStageDecision {
-  const flow = requireFlow(store, chat.id, run.flowId)
+  const flow = run.flowSnapshot ?? requireFlow(store, chat.id, run.flowId)
   const stage = flow.stages[stageRun.stageIndex]
   if (!stage) return nextStageDecision(store, chat, run, stageRun, timestamp)
   if (decision === 'fail' && reviewAttemptCount(run, stage.id) >= reviewMaxAttempts(stage)) {
@@ -715,14 +828,18 @@ function applyReviewDecision(store: OpenTeamStore, chat: GroupChat, run: Orchest
       return { next: false }
     }
     const continueTargets = reviewBranchStageIndices(flow, stageRun.stageId, 'pass')
-    if (continueTargets.length > 0) return { next: true, runId: run.id, stageIndices: continueTargets }
-    if (!hasRunningStageRuns(run)) completeRun(store, chat, run, timestamp)
+    if (continueTargets.length > 0) return queueStages(run, continueTargets)
+    if (!hasRunningStageRuns(run) && !run.pendingStageIndices?.length) completeRun(store, chat, run, timestamp)
     return { next: false }
   }
 
   const branchTargets = reviewBranchStageIndices(flow, stageRun.stageId, decision)
-  if (branchTargets.length > 0) return { next: true, runId: run.id, stageIndices: branchTargets }
-  if (!hasRunningStageRuns(run)) completeRun(store, chat, run, timestamp)
+  if (branchTargets.length > 0) return queueStages(run, branchTargets)
+  if (decision === 'fail' && flow.project) {
+    failRun(store, chat, run, 'BLOCKED: REWORK has no repair branch', timestamp)
+    return { next: false }
+  }
+  if (!hasRunningStageRuns(run) && !run.pendingStageIndices?.length) completeRun(store, chat, run, timestamp)
   return { next: false }
 }
 
@@ -730,6 +847,7 @@ function completeRun(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRu
   run.status = 'completed'
   run.completedAt = timestamp
   run.updatedAt = timestamp
+  run.pendingStageIndices = []
   delete store.activeOrchestrationRunIdByChatId[chat.id]
   chat.status = 'ready'
   chat.updatedAt = timestamp
@@ -743,6 +861,11 @@ function failRun(store: OpenTeamStore, chat: GroupChat, run: OrchestrationRun, r
   delete store.activeOrchestrationRunIdByChatId[chat.id]
   chat.status = 'error'
   chat.updatedAt = timestamp
+}
+
+function queueStages(run: OrchestrationRun, stageIndices: number[]): NextStageDecision {
+  run.pendingStageIndices = uniqueNumbers([...(run.pendingStageIndices ?? []), ...stageIndices])
+  return { next: true, runId: run.id, stageIndices }
 }
 
 function requireFlow(store: OpenTeamStore, chatId: string, flowId: string): OrchestrationFlow {

@@ -5,6 +5,19 @@ import { createControlActionExecutor, readTaskResult } from './controlHandlers'
 import type { RuntimeMessage } from './runtimeClient'
 
 describe('background control handlers', () => {
+  it('routes project control through the durable runtime and exposes blocked reasons', async () => {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    const route = vi.fn().mockResolvedValue({ ok: true })
+    const executor = createControlActionExecutor({ loadStore: async () => store, routeRuntimeMessage: route, runtimeFrames: { list: () => [] }, openTeamPage: vi.fn(), waitFor: async () => undefined, now: () => 1 })
+    const project = { id: 'p', chatId: 'chat-1' }
+    await executor({ id: 'start', action: 'project.start', payload: project })
+    expect(route).toHaveBeenCalledWith({ type: 'GROUP_PROJECT_START', project })
+    store.orchestrationRunsById.r = { id: 'r', chatId: 'chat-1', flowId: 'f', status: 'error', error: 'Missing permission', currentRound: 1, maxRounds: 1, stageRuns: [], createdAt: 1, updatedAt: 1, flowSnapshot: { id: 'f', chatId: 'chat-1', name: 'p', stages: [], maxRounds: 1, createdAt: 1, updatedAt: 1, project: { ...project, managerRoleId: 'm', reviewerRoleId: 'v', tasks: [], maxAttempts: 3 } } }
+    expect(await executor({ id: 'read', action: 'project.read', payload: project })).toMatchObject({ ok: true, data: { status: 'blocked', reason: 'Missing permission' } })
+    await executor({ id: 'pause', action: 'project.pause', payload: project })
+    expect(route).toHaveBeenLastCalledWith({ type: 'GROUP_ORCHESTRATION_STOP', chatId: 'chat-1' })
+  })
   it('routes create-and-post through existing chat, role, and message runtime commands', async () => {
     const store = createDefaultStore()
     store.settings.agentControlEnabled = true
