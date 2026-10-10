@@ -1,6 +1,7 @@
 import { OPENTEAM_CONTROL_CAPABILITIES, controlFailure, controlSuccess, isRecord, type ControlHttpCommand, type ControlHttpResult } from '../shared/localControlProtocol'
 import type { GroupChat, GroupMessage, GroupRole, OpenTeamStore, RoomMode, RuntimeFrameBinding } from '../group/types'
 import type { RuntimeMessage } from './runtimeClient'
+import { projectSummary } from '../group/projectWorkspace'
 
 export interface ControlActionExecutorDependencies {
   loadStore(): Promise<OpenTeamStore>
@@ -75,6 +76,14 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
       return postTask(command.payload, initialStore, deps)
     case 'project.start':
       return routeOk(deps, { type: 'GROUP_PROJECT_START', project: command.payload })
+    case 'project.import':
+      return routeOk(deps, { type: 'GROUP_PROJECT_IMPORT_TODO', project: command.payload })
+    case 'project.execute':
+      return routeOk(deps, { type: 'GROUP_PROJECT_EXECUTE', projectId: requirePayloadString(command.payload, 'id') })
+    case 'project.workspacePause':
+      return routeOk(deps, { type: 'GROUP_PROJECT_WORKSPACE_PAUSE', projectId: requirePayloadString(command.payload, 'id') })
+    case 'project.workspaceResume':
+      return routeOk(deps, { type: 'GROUP_PROJECT_WORKSPACE_RESUME', projectId: requirePayloadString(command.payload, 'id') })
     case 'project.pause':
       return routeOk(deps, { type: 'GROUP_ORCHESTRATION_STOP', chatId: requirePayloadString(command.payload, 'chatId') })
     case 'project.resume':
@@ -82,6 +91,11 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
     case 'project.read': {
       const chatId = requirePayloadString(command.payload, 'chatId')
       const projectId = requirePayloadString(command.payload, 'id')
+      const workspace = initialStore.projectsById?.[projectId]
+      if (workspace) {
+        if (workspace.chatId !== chatId) throw new Error('Project belongs to a different chat')
+        return { projectId, status: workspace.status, reason: workspace.reason, project: workspace, summary: projectSummary(workspace) }
+      }
       const run = Object.values(initialStore.orchestrationRunsById).find(item => item.chatId === chatId && item.flowSnapshot?.project?.id === projectId)
       if (!run) throw new Error('Project not found')
       return { projectId, status: run.status === 'error' ? 'blocked' : run.status === 'stopped' ? 'paused' : run.status, reason: run.error, run }

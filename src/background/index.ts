@@ -18,6 +18,7 @@ import { createPromptSender } from './promptDelivery'
 import { createRoleHandlers } from './roleHandlers'
 import { createOrchestrationHandlers, type OrchestrationAutoStreamMessage } from './orchestrationHandlers'
 import { recoverOrchestrationRuns } from './orchestrationRuntime'
+import { createProjectWorkspaceRuntime } from './projectWorkspaceRuntime'
 import { createRuntimeFrameRegistry } from './runtimeFrames'
 import { createSitePromptDeliveryLimiter } from './sitePromptDeliveryLimiter'
 import { getChatRoles, mutateStore } from './storeAccess'
@@ -129,8 +130,10 @@ function sendResponseSafely(sendResponse: (response?: unknown) => void, response
   }
 }
 
+const projectWorkspaceRuntime = createProjectWorkspaceRuntime({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt })
 const routeMessage = createMessageRouter([
   { type: 'GROUP_STORE_GET', handler: handleStoreGet },
+  ...projectWorkspaceRuntime.routes,
   ...createChatHandlers({ broadcastStoreUpdated, getChatStatusFromRoles, imageAttachments: imageAttachmentRepository, log, newId, now, runtimeFrames }),
   { type: 'GROUP_SETTINGS_UPDATE', handler: handleSettingsUpdate },
   ...createExternalModelHandlers({ broadcastStoreUpdated, externalModelClient, newId, now }),
@@ -142,7 +145,7 @@ const routeMessage = createMessageRouter([
 const executeControlCommand = createControlActionExecutor({
   loadStore,
   routeRuntimeMessage(message) {
-    return Promise.resolve(routeMessage(message, {}))
+    return Promise.resolve(routeMessage(message, {})).then(async response => { await projectWorkspaceRuntime.pump(); return response })
   },
   runtimeFrames,
   openTeamPage,
@@ -252,6 +255,7 @@ chrome.alarms?.onAlarm?.addListener(alarm => {
 
 function wakeOrchestration(): void {
   recoverOrchestrationRuns({ broadcastStoreUpdated, externalModelClient, getChatStatusFromRoles, log, newId, now, promptDeliveryLimiter, requestRoleRecovery, runtimeFrames, sendPrompt })
+    .then(() => projectWorkspaceRuntime.pump())
     .catch(error => logBackgroundFailure('orchestration:recovery-failed', error))
 }
 
@@ -266,6 +270,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
 
     Promise.resolve()
       .then(() => routeMessage(message, sender))
+      .then(async response => { await projectWorkspaceRuntime.pump(); return response })
       .then(response => sendResponseSafely(sendResponse, response))
       .catch((error: unknown) => {
         const reason = errorReason(error)

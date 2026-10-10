@@ -87,6 +87,10 @@ export async function startOrchestrationRun(deps: OrchestrationRuntimeDependenci
     const chat = requireChat(store, input.chatId)
     const flow = requireFlow(store, chat.id, input.flowId)
     validateExecutableFlow(store, chat, flow)
+    for (const workspace of Object.values(store.projectsById ?? {})) {
+      if (workspace.status === 'draft' || workspace.status === 'completed' || flow.project?.workspaceId === workspace.id) continue
+      if (workspace.chatId === chat.id || flow.project?.tasks.some(task => workspace.engineers.some(owner => owner.worktree.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === task.worktree.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() || owner.branch.toLowerCase() === task.branch.toLowerCase()))) throw new Error('Project workspace owns this chat, branch or worktree')
+    }
     if (flow.project) {
       const previous = Object.values(store.orchestrationRunsById).find(run => run.chatId === chat.id && run.flowSnapshot?.project?.id === flow.project?.id)
       if (previous) {

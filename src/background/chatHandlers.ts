@@ -97,6 +97,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      if (Object.values(store.projectsById ?? {}).some(project => project.chatId === chatId && project.status !== 'draft' && project.status !== 'completed')) throw new Error('An unfinished project owns this chat and source history; reconcile it first')
       const roleIds = [...chat.roleIds]
       const messageIds = [...chat.messageIds]
 
@@ -108,6 +109,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
 
       store.chatOrder = store.chatOrder.filter(id => id !== chat.id)
       delete store.chatsById[chat.id]
+      for (const project of Object.values(store.projectsById ?? {})) if (project.chatId === chat.id) delete store.projectsById![project.id]
       if (store.currentChatId === chat.id) store.currentChatId = store.chatOrder[0]
       if (store.viewState?.chatReadSeqById) delete store.viewState.chatReadSeqById[chat.id]
       if (store.viewState?.chatHasNewMessageById) delete store.viewState.chatHasNewMessageById[chat.id]
@@ -132,6 +134,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     const timestamp = deps.now()
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      if (Object.values(store.projectsById ?? {}).some(project => project.chatId === chatId && project.status !== 'draft' && project.status !== 'completed')) throw new Error('An unfinished project owns this chat and source history; reconcile it first')
       const roleIds = [...chat.roleIds]
       const messageIds = [...chat.messageIds]
 
@@ -175,6 +178,7 @@ export function createChatHandlers(deps: ChatHandlersDependencies): BackgroundMe
     const timestamp = deps.now()
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      if (Object.values(store.projectsById ?? {}).some(project => project.chatId === chatId && project.status !== 'draft' && project.status !== 'completed')) throw new Error('An unfinished project owns this chat and source history; reconcile it first')
       const roleIds = [...chat.roleIds]
 
       for (const roleId of roleIds) {

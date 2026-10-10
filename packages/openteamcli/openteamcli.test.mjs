@@ -9,6 +9,12 @@ import { buildCliRequest, help } from './openteamcli.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 describe('openteamcli command builder', () => {
+  it('builds hierarchy import, execute and workspace pause/resume requests', () => {
+    expect(buildCliRequest(['project', 'import', '--file', 'project.json', '--todo', 'TODO.md'])).toMatchObject({ kind: 'file-command', action: 'project.import', file: 'project.json', todoFile: 'TODO.md' })
+    expect(buildCliRequest(['project', 'execute', '--id', 'p'])).toMatchObject({ command: { action: 'project.execute', payload: { id: 'p' } } })
+    expect(buildCliRequest(['project', 'pause', '--id', 'p'])).toMatchObject({ command: { action: 'project.workspacePause', payload: { id: 'p' } } })
+    expect(buildCliRequest(['project', 'resume', '--id', 'p'])).toMatchObject({ command: { action: 'project.workspaceResume', payload: { id: 'p' } } })
+  })
   it('builds finite project start, read and pause commands', () => {
     expect(buildCliRequest(['project', 'start', '--file', 'backlog.json'])).toMatchObject({ kind: 'file-command', action: 'project.start', file: 'backlog.json' })
     expect(buildCliRequest(['project', 'read', '--chat', 'chat-1', '--id', 'p'])).toMatchObject({ command: { action: 'project.read', payload: { chatId: 'chat-1', id: 'p' } } })
@@ -72,6 +78,8 @@ describe('openteamcli command builder', () => {
         'openteamcli role batch-add --chat <chatId> --file roles.json',
         'openteamcli task post|wait|read',
         'openteamcli project start --file backlog.json',
+        'openteamcli project import --file project.json --todo TODO.md',
+        'openteamcli project execute --id <projectId>',
         'openteamcli project read --chat <id> --id <projectId>',
         'openteamcli project pause --chat <id>',
         'openteamcli project resume --chat <id>',

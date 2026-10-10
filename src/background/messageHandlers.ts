@@ -83,6 +83,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
 
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
+      if (Object.values(store.projectsById ?? {}).some(project => project.chatId === chatId && project.status !== 'draft' && project.status !== 'completed')) throw new Error('Project workspace owns this chat; use a separate chat for unrelated tasks')
       const activeProject = Object.values(store.orchestrationRunsById).find(run => run.chatId === chatId && run.flowSnapshot?.project && run.status !== 'completed')
       if (activeProject) throw new Error('Project owns this chat; use a separate chat for unrelated tasks')
       const roles = getChatRoles(store, chat)

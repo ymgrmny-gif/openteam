@@ -28,6 +28,7 @@ interface OpenTeamMetaStore {
   orchestrationFlowOrderByChatId?: Record<string, string[]>
   orchestrationRunsById?: Record<string, OrchestrationRun>
   activeOrchestrationRunIdByChatId?: Record<string, string>
+  projectsById?: OpenTeamStore['projectsById']
   globalNote?: RichNoteDocument
   chatNotesById?: Record<string, RichNoteDocument>
   messageHighlightsById?: Record<string, MessageHighlight[]>
@@ -150,6 +151,7 @@ function normalizeStore(raw: unknown): OpenTeamStore {
     orchestrationFlowOrderByChatId: readStringArrayRecord(raw.orchestrationFlowOrderByChatId),
     orchestrationRunsById: normalizeOrchestrationRunRecord(raw.orchestrationRunsById),
     activeOrchestrationRunIdByChatId: readStringRecord(raw.activeOrchestrationRunIdByChatId),
+    ...(isRecord(raw.projectsById) ? { projectsById: raw.projectsById as OpenTeamStore['projectsById'] } : {}),
     globalNote: normalizeNoteDocument(raw.globalNote),
     chatNotesById: readNoteRecord(raw.chatNotesById),
     messageHighlightsById: readHighlightsRecord(raw.messageHighlightsById),
@@ -194,6 +196,7 @@ async function loadV2Store(rawMeta: unknown): Promise<OpenTeamStore> {
   store.orchestrationFlowOrderByChatId = { ...(meta.orchestrationFlowOrderByChatId ?? {}) }
   store.orchestrationRunsById = { ...(meta.orchestrationRunsById ?? {}) }
   store.activeOrchestrationRunIdByChatId = { ...(meta.activeOrchestrationRunIdByChatId ?? {}) }
+  if (meta.projectsById) store.projectsById = meta.projectsById
   store.globalNote = meta.globalNote
   store.chatNotesById = { ...(meta.chatNotesById ?? {}) }
   store.messageHighlightsById = { ...(meta.messageHighlightsById ?? {}) }
@@ -236,6 +239,7 @@ function buildStorageItems(store: OpenTeamStore): Record<string, unknown> {
     orchestrationFlowOrderByChatId: readStringArrayRecord(store.orchestrationFlowOrderByChatId),
     orchestrationRunsById: normalizeOrchestrationRunRecord(store.orchestrationRunsById),
     activeOrchestrationRunIdByChatId: readStringRecord(store.activeOrchestrationRunIdByChatId),
+    ...(store.projectsById ? { projectsById: store.projectsById } : {}),
     globalNote: normalizeNoteDocument(store.globalNote),
     chatNotesById: readNoteRecord(store.chatNotesById),
     messageHighlightsById: readHighlightsRecord(store.messageHighlightsById),
@@ -328,6 +332,7 @@ function normalizeMetaStore(raw: unknown): OpenTeamMetaStore {
     orchestrationFlowOrderByChatId: readStringArrayRecord(raw.orchestrationFlowOrderByChatId),
     orchestrationRunsById: normalizeOrchestrationRunRecord(raw.orchestrationRunsById),
     activeOrchestrationRunIdByChatId: readStringRecord(raw.activeOrchestrationRunIdByChatId),
+    ...(isRecord(raw.projectsById) ? { projectsById: raw.projectsById as OpenTeamStore['projectsById'] } : {}),
     globalNote: normalizeNoteDocument(raw.globalNote),
     chatNotesById: readNoteRecord(raw.chatNotesById),
     messageHighlightsById: readHighlightsRecord(raw.messageHighlightsById),

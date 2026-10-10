@@ -73,10 +73,12 @@ export function buildCliRequest(argv) {
   }
 
   if (group === 'project') {
+    if (subcommand === 'import') return { kind: 'file-command', action: 'project.import', file: requireOption(options, 'file'), todoFile: requireOption(options, 'todo') }
+    if (subcommand === 'execute') return command('project.execute', { id: requireOption(options, 'id') })
     if (subcommand === 'start') return { kind: 'file-command', action: 'project.start', file: requireOption(options, 'file') }
     if (subcommand === 'read') return command('project.read', { chatId: requireOption(options, 'chat'), id: requireOption(options, 'id') })
-    if (subcommand === 'pause') return command('project.pause', { chatId: requireOption(options, 'chat') })
-    if (subcommand === 'resume') return command('project.resume', { chatId: requireOption(options, 'chat') })
+    if (subcommand === 'pause') return options.id ? command('project.workspacePause', { id: options.id }) : command('project.pause', { chatId: requireOption(options, 'chat') })
+    if (subcommand === 'resume') return options.id ? command('project.workspaceResume', { id: options.id }) : command('project.resume', { chatId: requireOption(options, 'chat') })
   }
 
   if (group === 'run' && subcommand === 'create-and-post') {
@@ -148,7 +150,11 @@ async function runRequest(request) {
   }
   if (request.kind === 'file-command') {
     const filePayload = JSON.parse(readFileSync(resolve(process.cwd(), request.file), 'utf8'))
-    const payload = request.decoratePayload ? request.decoratePayload(filePayload) : filePayload
+    let payload = request.decoratePayload ? request.decoratePayload(filePayload) : filePayload
+    if (request.todoFile) {
+      const sourcePath = realpathSync(resolve(process.cwd(), request.todoFile))
+      payload = { ...payload, sourcePath, todo: readFileSync(sourcePath, 'utf8') }
+    }
     await ensureDaemon()
     return daemonFetch('/command', {
       method: 'POST',
@@ -335,6 +341,8 @@ export function help() {
       'openteamcli role batch-add --chat <chatId> --file roles.json',
       'openteamcli task post|wait|read',
       'openteamcli project start --file backlog.json',
+      'openteamcli project import --file project.json --todo TODO.md',
+      'openteamcli project execute --id <projectId>',
       'openteamcli project read --chat <id> --id <projectId>',
       'openteamcli project pause --chat <id>',
       'openteamcli project resume --chat <id>',

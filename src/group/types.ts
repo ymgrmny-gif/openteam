@@ -32,6 +32,7 @@ export interface OpenTeamStore {
   orchestrationFlowOrderByChatId: Record<string, string[]>
   orchestrationRunsById: Record<string, OrchestrationRun>
   activeOrchestrationRunIdByChatId: Record<string, string>
+  projectsById?: Record<string, ProjectWorkspace>
   globalNote?: RichNoteDocument
   chatNotesById?: Record<string, RichNoteDocument>
   messageHighlightsById?: Record<string, MessageHighlight[]>
@@ -165,6 +166,7 @@ export interface ProjectBacklog {
   reviewerRoleId: string
   tasks: ProjectBacklogTask[]
   maxAttempts: number
+  workspaceId?: string
 }
 
 export interface ProjectBacklogTask {
@@ -175,6 +177,49 @@ export interface ProjectBacklogTask {
   branch: string
   worktree: string
   dependsOn: string[]
+}
+
+export type ProjectNodeStatus = 'open' | 'planning' | 'queued' | 'running' | 'review' | 'rework' | 'accepted' | 'blocked' | 'approval'
+
+export interface ProjectTaskNode {
+  id: string
+  parentId?: string
+  title: string
+  instruction: string
+  acceptance: string
+  kind: 'group' | 'task' | 'phase'
+  weight: number
+  dependsOn: string[]
+  sourceLine?: number
+  sourceChecked?: boolean
+  requiresApproval: boolean
+  planned: boolean
+  status: ProjectNodeStatus
+  ownerRoleId?: string
+  runKey?: string
+  runId?: string
+  reason?: string
+  evidence?: string[]
+  acceptedAt?: number
+  events: Array<{ at: number; status: ProjectNodeStatus; reason?: string }>
+}
+
+export interface ProjectWorkspace {
+  id: string
+  chatId: string
+  name: string
+  goals: string
+  sourcePath: string
+  sourceText: string
+  managerRoleId: string
+  reviewerRoleId: string
+  engineers: Array<{ roleId: string; branch: string; worktree: string }>
+  nodes: ProjectTaskNode[]
+  status: 'draft' | 'running' | 'paused' | 'blocked' | 'completed'
+  activeNodeId?: string
+  reason?: string
+  createdAt: number
+  updatedAt: number
 }
 
 export interface OrchestrationReviewResult {

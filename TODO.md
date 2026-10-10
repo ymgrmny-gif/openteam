@@ -124,3 +124,16 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] Kanıt raporu: `docs/OPENTEAM_GPT_WORKFORCE_ACCEPTANCE_20261010.md`.
 - [ ] Tarihi `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` task `pending` ledger temizlenmeli, YENİDEN GÖNDERİLMEMELİ. Bu kayıt yeni görevleri engellemiyor.
 - [ ] RD2 Phase0 D01–D22/V1 parite ve native Windows E2E bağımsız kabulü hâlâ `REWORK`; RD2 main değiştirilmedi.
+
+## 2026-10-10 / Proje → görev → aşama ve otomatik ilerleme
+
+- [x] TODO snapshot içe aktarma: başlıklar, alt görevler, bağımlılıklar, ağırlıklar ve izin kapıları; tarihî [x] işaretleri doğrulanmış kabul sayılmaz.
+- [x] Manager plan-only yanıtıyla 1..8 sonlu aşama; tek-yazar sahipliği korunur, son aşama ana işin bütünleşik kabulünü doğrular.
+- [x] Engineer → IndependentReviewer PASS/REWORK; kabul sonrası otomatik sonraki aşama/iş; tüm sonlu backlog kabul edilince completed.
+- [x] Kalıcı checkpoint/lease ve özgün kaynak yanıtıyla pause/resume; reload sentetik regresyonunda duplicate-send yok. Blocked sebebi ve izin sınırı korunur.
+- [x] Proje paneli: açılır görev/aşama ağacı, kabul/açık sayısı, ağırlıklı ilerleme, sahip, kabul koşulları, kanıt ve geçmiş; CLI import/execute/read/pause/resume.
+- [x] Yeni ve mevcut çalışma kapsamları için ayrı kaynak/rol/worktree sahipliği; açık projenin kaynak geçmişi ve rol kimliği silinemez.
+- [x] Teknik teslim ve kullanım: docs/PROJECT_WORKSPACE_HANDOFF.md. RD2 ana depoya dokunulmadı; upstream push/merge yok.
+- [ ] LIVE NOT_RUN: doctor PASS fakat yüklü extension yeni project.import/execute/workspacePause/workspaceResume yeteneklerini henüz bildirmiyor. Yeni build yüklenip gerçek Manager→Engineer→Reviewer→sonraki iş ve reload-resume kabulü yapılmalı. Sentetik testler canlı kabul değildir.
+- [ ] TODO disk izleme/writeback ve değişen TODO'nun eski kabul kayıtlarıyla birleştirilmesi bu sürümde yok; snapshot kaynak korunur.
+- [x] Son doğrulama: npm run verify exit 0; TypeScript PASS, Vitest 750/750 (89 dosya) PASS, build PASS; git diff --check PASS.

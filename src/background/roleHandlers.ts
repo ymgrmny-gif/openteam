@@ -196,6 +196,7 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       const role = store.rolesById[roleId]
       if (!role) throw new Error(`找不到人员：${roleId}`)
       const chatId = role.chatId
+      if (Object.values(store.projectsById ?? {}).some(project => project.chatId === chatId && project.status !== 'draft' && project.status !== 'completed' && [project.managerRoleId, project.reviewerRoleId, ...project.engineers.map(item => item.roleId)].includes(roleId))) throw new Error('An unfinished project owns this role; reconcile it before deleting source identity')
       deleteGroupRole(store, roleId, deps.now())
       deps.runtimeFrames.removeRole(chatId, roleId)
       return { chatId, roleId }

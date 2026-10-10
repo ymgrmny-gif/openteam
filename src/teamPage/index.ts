@@ -17,6 +17,7 @@ import { createNotesView } from './notesView'
 import { createPeopleLibraryView } from './peopleLibraryView'
 import { createOrchestrationModalView } from './orchestrationModalView'
 import { createOrchestrationStatusView } from './orchestrationStatusView'
+import { createProjectWorkspaceView } from './projectWorkspaceView'
 import { createRoleRecoveryController } from './roleRecoveryController'
 import { createChatSessionHandoffController } from './chatSessionHandoffController'
 import { createRolePanelView } from './rolePanelView'
@@ -97,6 +98,16 @@ const runtimeClient = createTeamPageRuntimeClient({
 })
 const sendRuntimeMessage = runtimeClient.sendRuntimeMessage
 const runCommand = runtimeClient.runCommand
+const projectWorkspaceView = createProjectWorkspaceView({
+  openButton: document.querySelector<HTMLButtonElement>('#open-project-workspace')!,
+  modal: document.querySelector<HTMLElement>('#project-workspace-modal')!,
+  content: document.querySelector<HTMLElement>('#project-workspace-content')!,
+  getStore: () => store,
+  getCurrentChat,
+  getRoles: getCurrentRoles,
+  runCommand,
+  showError,
+})
 const languageSettingsController = createLanguageSettingsController({
   turkishButton: languageTrEl,
   englishButton: languageEnEl,
@@ -598,6 +609,7 @@ function registerAgentControlSettings(): void {
 }
 
 function renderSelectedChat(): void {
+  projectWorkspaceView.render()
   renderChatList()
   renderChatHeader()
   renderMessages()
@@ -684,6 +696,7 @@ async function boot(): Promise<void> {
   languageSettingsController.registerEvents()
   registerAgentControlSettings()
   registerUi()
+  projectWorkspaceView.registerEvents()
   registerOrchestrationEvents()
   registerNotesEvents()
   render()
