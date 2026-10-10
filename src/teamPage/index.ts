@@ -18,6 +18,7 @@ import { createPeopleLibraryView } from './peopleLibraryView'
 import { createOrchestrationModalView } from './orchestrationModalView'
 import { createOrchestrationStatusView } from './orchestrationStatusView'
 import { createRoleRecoveryController } from './roleRecoveryController'
+import { createChatSessionHandoffController } from './chatSessionHandoffController'
 import { createRolePanelView } from './rolePanelView'
 import { createTeamPageRuntimeClient, type StorePushMessage } from './runtimeClient'
 import { createTeamPagePrimaryCoordinator } from './teamPagePrimary'
@@ -206,6 +207,15 @@ const roleRecoveryController = createRoleRecoveryController({
 })
 const notifyRoleReadyWaiters = roleRecoveryController.notifyRoleReadyWaiters
 const reconnectRolesForSend = roleRecoveryController.reconnectRolesForSend
+const chatSessionHandoffController = createChatSessionHandoffController({
+  getStore: () => store,
+  getCurrentChat,
+  reconnectRolesForSend,
+  runCommand,
+  refreshStore,
+  showError,
+  log,
+})
 const focusRoleFrame = roleRecoveryController.focusRoleFrame
 const resyncMessageReply = roleRecoveryController.resyncMessageReply
 const retryRoleReply = roleRecoveryController.retryRoleReply
@@ -488,6 +498,7 @@ function applyStore(nextStore: OpenTeamStore): void {
   syncIframeHost()
   render()
   notifyRoleReadyWaiters()
+  if (primaryCoordinator.isPrimary()) chatSessionHandoffController.check()
 }
 
 function getCurrentChat(): GroupChat | undefined {
@@ -660,6 +671,9 @@ async function boot(): Promise<void> {
   registerNotesEvents()
   render()
   await refreshStore(false)
+  window.setInterval(() => {
+    if (primaryCoordinator.isPrimary()) chatSessionHandoffController.check()
+  }, 3000)
 }
 
 boot().catch(error => showError(error instanceof Error ? error.message : String(error)))

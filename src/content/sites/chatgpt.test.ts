@@ -732,4 +732,36 @@ describe('ChatGPT site adapter', () => {
 
     expect(createChatGptAdapter().isGenerating()).toBe(true)
   })
+  it('recognizes a visible conversation length warning separately from account quota', () => {
+    document.body.innerHTML = '<div role="alert">Bu konuşma için maksimum süreye ulaştın ama yeni bir sohbet başlatarak konuşmaya devam edebilirsin.</div>'
+    const adapter = createChatGptAdapter()
+    expect(adapter.checkStatus?.()).toMatchObject({ status: 'blocked', detail: 'CONVERSATION_EXHAUSTED' })
+    document.body.innerHTML = '<div role="alert">You have reached your usage limit</div>'
+    expect(adapter.checkStatus?.()).toMatchObject({ status: 'blocked', detail: 'ACCOUNT_QUOTA' })
+  })
+
+  it('ignores hidden or inaccessible limit notices', () => {
+    document.body.innerHTML = '<div role="alert" hidden>Bu konuşma için maksimum süreye ulaştın</div>'
+    expect(createChatGptAdapter().checkStatus?.()).toMatchObject({ status: 'ready' })
+    document.body.innerHTML = '<section aria-hidden="true"><div role="alert">This conversation has reached its maximum length</div></section>'
+    expect(createChatGptAdapter().checkStatus?.()).toMatchObject({ status: 'ready' })
+  })
+
+  it('does not treat a user quotation of a limit warning as a platform limit', () => {
+    document.body.innerHTML = '<article data-turn="user"><div role="alert">This conversation has reached its maximum length</div></article>'
+    expect(createChatGptAdapter().checkStatus?.()).toMatchObject({ status: 'ready' })
+  })
+
+  it('refuses to send into exhausted chat and does not click the composer', async () => {
+    document.body.innerHTML = `
+      <div role="alert">This conversation has reached its maximum length</div>
+      <form><div id="prompt-textarea" contenteditable="true"></div><button data-testid="send-button">Send</button></form>
+    `
+    const click = vi.fn()
+    document.querySelector('button')?.addEventListener('click', click)
+    await expect(createChatGptAdapter().fillAndSend('unsafe')).rejects.toThrow('CONVERSATION_EXHAUSTED')
+    expect(click).not.toHaveBeenCalled()
+    expect(document.querySelector('#prompt-textarea')?.textContent).toBe('')
+  })
+
 })

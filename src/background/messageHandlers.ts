@@ -251,6 +251,13 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const { store, result } = await mutateStore(store => {
       const chat = requireChat(store, chatId)
       const role = requireRole(store, chat.id, roleId)
+      if (role.conversationHandoff && role.conversationHandoff.phase !== 'verified') {
+        throw new Error('Sohbet devri tamamlanmadan görev yeniden gönderilemez')
+      }
+      if (role.siteHealth?.status === 'blocked' &&
+          (role.siteHealth.detail === 'CONVERSATION_EXHAUSTED' || role.siteHealth.detail === 'ACCOUNT_QUOTA')) {
+        throw new Error('Sohbet veya hesap limiti nedeniyle görev yeniden gönderilemez')
+      }
       const requestedMessageId = readOptionalString(message.messageId)
       const retryTarget = resolveRetryTarget(store, chat, role, requestedMessageId, deps.log)
       const userMessage = retryTarget?.userMessage
@@ -774,6 +781,14 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const role = requireRole(store, chat.id, identity.roleId)
       role.status = 'error'
       role.updatedAt = timestamp
+      if (reason.includes('CONVERSATION_EXHAUSTED') || reason.includes('ACCOUNT_QUOTA')) {
+        role.siteHealth = {
+          siteId: role.chatSite ?? 'chatgpt',
+          status: 'blocked',
+          detail: reason.includes('ACCOUNT_QUOTA') ? 'ACCOUNT_QUOTA' : 'CONVERSATION_EXHAUSTED',
+          updatedAt: timestamp,
+        }
+      }
       if (!promptMessageId || role.lastPromptMessageId === promptMessageId) delete role.lastPromptMessageId
       if (!replyAttemptId || role.replyAttemptId === replyAttemptId) delete role.replyAttemptId
 
@@ -994,6 +1009,8 @@ function isRetryableRoleError(reason: string): boolean {
     'aborted',
     'unauthorized',
     'invalid_api_key',
+    'conversation_exhausted',
+    'account_quota',
     'model_not_found',
     '401',
     '403',
@@ -1479,6 +1496,9 @@ function isStaleThinkingRole(role: GroupRole, timestamp: number): boolean {
 }
 
 function isRoleDeliverable(role: GroupRole, binding: RuntimeFrameBinding | undefined, timestamp: number): boolean {
+  if (role.conversationHandoff && role.conversationHandoff.phase !== 'verified') return false
+  if (role.siteHealth?.status === 'blocked' &&
+      (role.siteHealth.detail === 'CONVERSATION_EXHAUSTED' || role.siteHealth.detail === 'ACCOUNT_QUOTA')) return false
   if (!binding?.ready) return false
   return role.status === 'ready' || role.status === 'error' || role.status === 'stopped' || role.status === 'loading' || role.status === 'pending' || isStaleThinkingRole(role, timestamp)
 }

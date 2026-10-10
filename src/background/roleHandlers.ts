@@ -1,5 +1,6 @@
-import { getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
+import { extractSupportedConversationId, getDefaultChatSiteUrlForRole, normalizeSupportedChatConversationUrl } from '../group/conversationUrl'
 import { buildRoleTemplatePersonaPrompt, parseGeneratedPersonDraft } from '../group/personaGeneration'
+import { buildHandoffCheckpoint, buildHandoffResumePrompt } from '../group/chatSessionHandoff'
 import { buildReinitPrompt, roleUsesChatGptGptsPersona } from '../group/promptBuilder'
 import {
   createGroupRole,
@@ -30,6 +31,9 @@ export const ROLE_ROUTE_TYPES = [
   'GROUP_ROLE_DELETE',
   'GROUP_ROLE_RECOVER',
   'GROUP_ROLE_REINITIALIZE',
+  'GROUP_ROLE_CHAT_HANDOFF',
+  'GROUP_ROLE_CHAT_HANDOFF_VERIFY',
+  'GROUP_ROLE_CHAT_HANDOFF_FAIL',
 ] as const
 
 export interface RoleHandlersDependencies {
@@ -224,6 +228,98 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     return { ok: true, ...result, store }
   }
 
+
+  // Rotate only an idle, specifically exhausted ChatGPT conversation. Any in-flight
+  // task must be independently reconciled; never replay a possibly applied action.
+  const handleRoleChatHandoff = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, 'Eksik sohbet kimliği')
+    const roleId = requireString(message.roleId, 'Eksik personel kimliği')
+    const timestamp = deps.now()
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const role = requireRole(store, chat.id, roleId)
+      if (role.modelSource === 'external' || role.chatSite !== 'chatgpt') throw new Error('Yalnız ChatGPT web sohbeti devredilebilir')
+      if (role.siteHealth?.status !== 'blocked' || role.siteHealth.detail !== 'CONVERSATION_EXHAUSTED') {
+        throw new Error('Doğrulanmış sohbet uzunluğu sınırı yok')
+      }
+      if (role.conversationHandoff && role.conversationHandoff.phase !== 'verified') throw new Error('Bu personel için devir zaten kaydedilmiş')
+      if (role.status === 'thinking' || role.lastPromptMessageId ||
+          chat.messageIds.some(id => {
+            const status = store.messagesById[id]?.deliveryStatus?.[role.id]
+            return status === 'pending' || status === 'sent'
+          })) throw new Error('Aktif veya belirsiz görev; otomatik devir engellendi')
+      const checkpoint = buildHandoffCheckpoint(store, chat, role)
+      if (!checkpoint.oldConversationUrl) throw new Error('Eski sohbet bağlantısı doğrulanamıyor; devir engellendi')
+      role.conversationHandoff = {
+        phase: 'rotating',
+        startedAt: timestamp,
+        previousConversationUrl: checkpoint.oldConversationUrl,
+        previousMessageId: checkpoint.pendingMessageId,
+        checkpointSeq: checkpoint.lastMessageSeq,
+        checkpointHistory: checkpoint.history,
+      }
+      delete role.geminiConversationUrl
+      delete role.geminiConversationId
+      delete role.siteHealth
+      role.contextCursor = checkpoint.lastMessageSeq
+      role.status = 'loading'
+      role.updatedAt = timestamp
+      chat.status = 'initializing'
+      chat.updatedAt = timestamp
+      return checkpoint
+    })
+    deps.runtimeFrames.removeRole(chatId, roleId)
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, checkpoint: result, store }
+  }
+
+  const handleRoleChatHandoffVerify = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, 'Eksik sohbet kimliği')
+    const roleId = requireString(message.roleId, 'Eksik personel kimliği')
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const role = requireRole(store, chat.id, roleId)
+      const handoff = role.conversationHandoff
+      if (!handoff || (handoff.phase !== 'rotating' && handoff.phase !== 'initializing')) {
+        throw new Error('Doğrulanacak aktif devir bulunamadı')
+      }
+      const currentId = extractSupportedConversationId(role.geminiConversationUrl)
+      const previousId = extractSupportedConversationId(handoff.previousConversationUrl)
+      const acknowledgement = chat.messageIds
+        .map(id => store.messagesById[id])
+        .find(reply => reply?.type === 'assistant' && reply.roleId === role.id &&
+          reply.sourceMessageId === handoff.initMessageId && reply.content.trim() === 'HAZIR_DEVIR')
+      if (role.status !== 'ready' || role.siteHealth?.status === 'blocked' ||
+          !currentId || !previousId || currentId === previousId ||
+          !handoff.initMessageId || !acknowledgement || acknowledgement.createdAt < handoff.startedAt) {
+        throw new Error('Yeni sohbetin kimliği ve HAZIR_DEVIR yanıtı henüz doğrulanmadı')
+      }
+      role.conversationHandoff = { ...handoff, phase: 'verified' }
+      role.updatedAt = deps.now()
+      chat.updatedAt = role.updatedAt
+      return role
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, role: result, store }
+  }
+
+  const handleRoleChatHandoffFail = async (message: RuntimeMessage) => {
+    const chatId = requireString(message.chatId, 'Eksik sohbet kimliği')
+    const roleId = requireString(message.roleId, 'Eksik personel kimliği')
+    const { store, result } = await mutateStore(store => {
+      const chat = requireChat(store, chatId)
+      const role = requireRole(store, chat.id, roleId)
+      if (!role.conversationHandoff || role.conversationHandoff.phase === 'verified') throw new Error('Bekleyen devir bulunamadı')
+      role.conversationHandoff = { ...role.conversationHandoff, phase: 'blocked' }
+      role.status = 'error'
+      role.updatedAt = deps.now()
+      chat.updatedAt = role.updatedAt
+      return role
+    })
+    await deps.broadcastStoreUpdated(store)
+    return { ok: true, role: result, store }
+  }
+
   const handleRoleReinitialize = async (message: RuntimeMessage) => {
     const chatId = requireString(message.chatId, '缺少群聊 ID')
     const roleId = requireString(message.roleId, '缺少人员 ID')
@@ -241,6 +337,10 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
       const messageId = deps.newId('init')
       const replyAttemptId = deps.newId('attempt')
       const includesPersona = !roleUsesChatGptGptsPersona(role)
+      if (role.conversationHandoff?.phase === 'rotating') {
+        role.conversationHandoff.phase = 'initializing'
+        role.conversationHandoff.initMessageId = messageId
+      }
       role.status = 'thinking'
       role.lastPromptMessageId = messageId
       role.replyAttemptId = replyAttemptId
@@ -259,8 +359,19 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
             roleId,
             messageId,
             replyAttemptId,
-            content: buildReinitPrompt(chat, role, roles, includesPersona),
-            includesPersona,
+            content: role.conversationHandoff?.phase === 'initializing'
+              ? buildReinitPrompt(chat, role, roles, true, store.settings.language) + '\n\n' +
+                buildHandoffResumePrompt({
+                  chatId: chat.id,
+                  roleId: role.id,
+                  roleName: role.name,
+                  oldConversationUrl: role.conversationHandoff.previousConversationUrl,
+                  pendingMessageId: role.conversationHandoff.previousMessageId,
+                  lastMessageSeq: role.conversationHandoff.checkpointSeq,
+                  history: role.conversationHandoff.checkpointHistory,
+                })
+              : buildReinitPrompt(chat, role, roles, includesPersona, store.settings.language),
+            includesPersona: role.conversationHandoff?.phase === 'initializing' ? true : includesPersona,
           },
         },
       }
@@ -290,6 +401,9 @@ export function createRoleHandlers(deps: RoleHandlersDependencies): BackgroundMe
     { type: 'GROUP_ROLE_DELETE', handler: handleRoleDelete },
     { type: 'GROUP_ROLE_RECOVER', handler: handleRoleRecover },
     { type: 'GROUP_ROLE_REINITIALIZE', handler: handleRoleReinitialize },
+    { type: 'GROUP_ROLE_CHAT_HANDOFF', handler: handleRoleChatHandoff },
+    { type: 'GROUP_ROLE_CHAT_HANDOFF_VERIFY', handler: handleRoleChatHandoffVerify },
+    { type: 'GROUP_ROLE_CHAT_HANDOFF_FAIL', handler: handleRoleChatHandoffFail },
   ]
 }
 

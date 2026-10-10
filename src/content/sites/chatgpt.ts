@@ -1,3 +1,4 @@
+import { detectChatSessionLimit } from '../../group/chatSessionHandoff'
 import type { ReplyImageSource } from '../../group/types'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
@@ -89,6 +90,9 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
 
   async function fillAndSend(content: string, autoSend = true): Promise<void> {
     if (!content.trim()) throw new Error('ChatGPT: empty prompt rejected')
+    const limit = detectChatGptVisibleLimit()
+    if (limit === 'conversation_exhausted') throw new Error('CONVERSATION_EXHAUSTED: yeni sohbet devri gerekli; mesaj gönderilmedi')
+    if (limit === 'account_quota') throw new Error('ACCOUNT_QUOTA: hesap kullanım hakkı doldu; yeni sohbet çözüm değildir')
     if (isChatGptGenerating()) throw new Error('ChatGPT is already generating; prompt not sent')
 
     const editor = await waitForUniqueComposer(inputTimeoutMs)
@@ -356,8 +360,37 @@ async function waitForSendAcknowledgement(
   })
 }
 
+function detectChatGptVisibleLimit(): ReturnType<typeof detectChatSessionLimit> {
+  // Read only identifiable application alerts/dialogs. NEVER scan chat transcript:
+  // a user/assistant quotation of an error must not rotate a role's conversation.
+  const selectors = [
+    '[role="alert"]', '[role="alertdialog"]', '[role="dialog"]',
+    '[data-testid="error-message"]', '[data-testid*="toast"]',
+    '[data-testid*="conversation-limit"]', '.error-message', '.toast',
+  ].join(', ')
+  const notices = [...document.querySelectorAll<HTMLElement>(selectors)]
+    .filter(node => {
+      if (node.hidden || node.closest('[hidden], [aria-hidden="true"], [inert]')) return false
+      if (node.closest('[data-turn="user"], [data-turn="assistant"], [data-message-author-role], [data-testid^="conversation-turn-"]')) return false
+      const style = window.getComputedStyle(node)
+      return style.display !== 'none' && style.visibility !== 'hidden'
+    })
+  for (const notice of notices) {
+    const classification = detectChatSessionLimit(notice.innerText || notice.textContent || '')
+    if (classification) return classification
+  }
+  return undefined
+}
+
 function checkChatGptStatus(): SiteStatusInfo {
   const timestamp = Date.now()
+  const limit = detectChatGptVisibleLimit()
+  if (limit === 'conversation_exhausted') {
+    return { status: 'blocked', detail: 'CONVERSATION_EXHAUSTED', timestamp }
+  }
+  if (limit === 'account_quota') {
+    return { status: 'blocked', detail: 'ACCOUNT_QUOTA', timestamp }
+  }
 
   // 1. Check for blockage (Cloudflare, Access Denied)
   if (document.title.includes('Access Denied') || document.querySelector('.cloudflare-challenge')) {

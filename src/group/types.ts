@@ -237,6 +237,16 @@ export interface RoleTemplate {
   updatedAt: number
 }
 
+export interface RoleConversationHandoff {
+  phase: 'rotating' | 'initializing' | 'verified' | 'blocked'
+  startedAt: number
+  previousConversationUrl?: string
+  previousMessageId?: string
+  checkpointSeq: number
+  checkpointHistory: string
+  initMessageId?: string
+}
+
 export interface GroupRole {
   id: string
   chatId: string
@@ -259,6 +269,7 @@ export interface GroupRole {
   replyAttemptId?: string
   lastReplyAt?: number
   siteHealth?: RoleSiteHealth
+  conversationHandoff?: RoleConversationHandoff
   createdAt: number
   updatedAt: number
 }

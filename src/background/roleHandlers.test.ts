@@ -47,6 +47,9 @@ describe('background role handlers', () => {
       'GROUP_ROLE_DELETE',
       'GROUP_ROLE_RECOVER',
       'GROUP_ROLE_REINITIALIZE',
+      'GROUP_ROLE_CHAT_HANDOFF',
+      'GROUP_ROLE_CHAT_HANDOFF_VERIFY',
+      'GROUP_ROLE_CHAT_HANDOFF_FAIL',
     ])
     expect(routes.map(route => route.type)).toEqual(ROLE_ROUTE_TYPES)
 
