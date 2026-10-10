@@ -33,6 +33,10 @@ CLI configuration (actual room/role identifiers and user-authorized isolated wor
   "goals": "User-authorized bounded development scope and acceptance goals",
   "managerRoleId": "MANAGER_ID",
   "reviewerRoleId": "REVIEWER_ID",
+  "execution": {
+    "baseCommit": "FULL_40_CHARACTER_LOWERCASE_GIT_SHA",
+    "allowedPaths": { "ENGINEER_A_ID": ["src/owned-a"], "ENGINEER_B_ID": ["src/owned-b"] }
+  },
   "engineers": [
     { "roleId": "ENGINEER_A_ID", "branch": "codex/example-a", "worktree": "C:/Projects/example-a" },
     { "roleId": "ENGINEER_B_ID", "branch": "codex/example-b", "worktree": "C:/Projects/example-b" }
@@ -70,3 +74,5 @@ Read-only live doctor on 2026-10-10 returned exit 0 / ok=true: daemon 19305 reac
 Final validation: see the verification entry below and TODO.md. Required next live acceptance: load the build, preserve existing room state, run two explicitly scoped toy tasks in isolated worktrees, verify actual source/test/Git evidence, observe automatic next dispatch, and reload between acceptance and dispatch to verify no duplicate real user turn. RD2 native/product acceptance remains separate.
 
 Final verification (2026-10-10): `npm run verify` exit 0; strict TypeScript PASS; Vitest 750/750 in 89 files PASS; Vite production build PASS. `git diff --check` PASS. Only pre-existing Vite CJS/chunk-size warnings; no permission/manifest change. Verification used localhost access for daemon tests. Generated dist/logs are not committed.
+
+Current correction (2026-10-10): superseded execution details and prior installed-extension boundary are reconciled in PROJECT_EXECUTION_GATES_HANDOFF.md. Independent plan/readiness review and configured full baseline/exclusive paths are now required for workspace execution. Final verify 759/759 exit0; live build reload/doctor and invalid-base rejection confirmed. Actual two-task GPT/tools E2E and live delivery reload-resume remain NOT_RUN.

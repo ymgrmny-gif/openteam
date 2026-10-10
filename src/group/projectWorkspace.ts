@@ -1,5 +1,6 @@
 import type { ProjectNodeStatus, ProjectTaskNode, ProjectWorkspace } from './types'
 import { compileProjectBacklog } from './projectBacklog'
+import { isCommit, validateAllowedPaths } from './projectExecutionGate'
 
 export function importProjectTodo(raw: unknown, now: number): ProjectWorkspace {
   const input = record(raw)
@@ -17,7 +18,20 @@ export function importProjectTodo(raw: unknown, now: number): ProjectWorkspace {
   const sourceText = required(input.todo, 'TODO content')
   if (sourceText.length > 500_000) throw new Error('TODO exceeds 500 KB')
   const nodes = parseProjectTodo(sourceText, now)
-  return { id, chatId, name: required(input.name, 'project name'), goals: required(input.goals, 'project goals'), sourcePath: required(input.sourcePath, 'TODO source'), sourceText, managerRoleId, reviewerRoleId, engineers, nodes, status: 'draft', createdAt: now, updatedAt: now }
+  let execution: ProjectWorkspace['execution']
+  if (input.execution !== undefined) {
+    const contract = record(input.execution)
+    if (!isCommit(contract.baseCommit)) throw new Error('baseCommit must be a full lowercase Git SHA')
+    const paths = record(contract.allowedPaths)
+    const allowedPaths: Record<string, string[]> = {}
+    for (const engineer of engineers) { validateAllowedPaths(paths[engineer.roleId]); allowedPaths[engineer.roleId] = paths[engineer.roleId] as string[] }
+    const entries = Object.entries(allowedPaths)
+    for (const [index, [, own]] of entries.entries()) for (const [, other] of entries.slice(index + 1)) {
+      if (own.some(a => other.some(b => a.toLowerCase() === b.toLowerCase() || a.toLowerCase().startsWith(`${b.toLowerCase()}/`) || b.toLowerCase().startsWith(`${a.toLowerCase()}/`)))) throw new Error('Engineers must have exclusive nonoverlapping allowedPaths')
+    }
+    execution = { baseCommit: contract.baseCommit, allowedPaths }
+  }
+  return { id, chatId, name: required(input.name, 'project name'), goals: required(input.goals, 'project goals'), sourcePath: required(input.sourcePath, 'TODO source'), sourceText, managerRoleId, reviewerRoleId, engineers, execution, nodes, status: 'draft', createdAt: now, updatedAt: now }
 }
 
 export function parseProjectTodo(text: string, now: number): ProjectTaskNode[] {
@@ -56,7 +70,9 @@ export function parseProjectTodo(text: string, now: number): ProjectTaskNode[] {
     const dependsOn = attrs.dependsOn ?? []
     if (!Array.isArray(dependsOn) || dependsOn.some(dep => typeof dep !== 'string')) throw new Error(`Invalid dependencies at line ${index + 1}`)
     const requiresApproval = attrs.requiresApproval === true
-    nodes.push({ id, parentId, title, instruction: title, acceptance: typeof attrs.acceptance === 'string' && attrs.acceptance.trim() ? attrs.acceptance.trim() : `Verify the full requirement: ${title}. Read actual sources, run relevant acceptance tests and verify Git/worktree ownership.`, kind: heading ? 'group' : 'task', weight, dependsOn: dependsOn as string[], sourceLine: index + 1, sourceChecked: checkbox ? checkbox[2].toLowerCase() === 'x' : undefined, requiresApproval, planned: attrs.executable === true, status: requiresApproval ? 'approval' : 'open', events: [{ at: now, status: requiresApproval ? 'approval' : 'open', reason: checkbox?.[2].toLowerCase() === 'x' ? 'Imported checkbox is historical; independent acceptance still required' : 'Imported from TODO' }] })
+    if (attrs.acceptanceLevel !== undefined && !['source', 'contract', 'native'].includes(String(attrs.acceptanceLevel))) throw new Error(`Invalid acceptanceLevel at line ${index + 1}`)
+    if (attrs.traceability !== undefined && (!Array.isArray(attrs.traceability) || attrs.traceability.some(value => typeof value !== 'string' || !value.trim()))) throw new Error(`Invalid traceability at line ${index + 1}`)
+    nodes.push({ id, parentId, title, instruction: title, acceptance: typeof attrs.acceptance === 'string' && attrs.acceptance.trim() ? attrs.acceptance.trim() : `Verify the full requirement: ${title}. Read actual sources, run relevant acceptance tests and verify Git/worktree ownership.`, acceptanceLevel: attrs.acceptanceLevel === 'native' ? 'native' : attrs.acceptanceLevel === 'contract' ? 'contract' : 'source', traceability: Array.isArray(attrs.traceability) ? attrs.traceability.filter((value): value is string => typeof value === 'string') : [], kind: heading ? 'group' : 'task', weight, dependsOn: dependsOn as string[], sourceLine: index + 1, sourceChecked: checkbox ? checkbox[2].toLowerCase() === 'x' : undefined, requiresApproval, planned: attrs.executable === true, status: requiresApproval ? 'approval' : 'open', events: [{ at: now, status: requiresApproval ? 'approval' : 'open', reason: checkbox?.[2].toLowerCase() === 'x' ? 'Imported checkbox is historical; independent acceptance still required' : 'Imported from TODO' }] })
   }
   const retained = nodes.filter(node => node.kind !== 'group' || nodes.some(other => other.parentId === node.id && (other.kind !== 'group' || hasTaskDescendant(nodes, other.id))))
   if (!retained.length || retained.length > 300) throw new Error('TODO must contain tasks; maximum 300 hierarchy nodes')
@@ -125,7 +141,7 @@ export function applyManagerBreakdown(project: ProjectWorkspace, parent: Project
     const id = `${parent.id}/phase-${index + 1}`
     const requiresApproval = parent.requiresApproval || phase.requiresApproval === true
     const dependsOn = index ? [`${parent.id}/phase-${index}`] : []
-    return { id, parentId: parent.id, title: required(phase.title, 'phase title'), instruction: `${parent.instruction}\n\nCurrent phase: ${required(phase.instruction, 'phase instruction')}`, acceptance: `${required(phase.acceptance, 'phase acceptance')}${index === rawPhases.length - 1 ? `\nIntegrated original requirement: ${parent.acceptance}` : '\nAccept only this phase; the parent task remains open until integrated acceptance.'}`, kind: 'phase' as const, weight: 1, dependsOn, ownerRoleId: parent.ownerRoleId, requiresApproval, planned: true, status: requiresApproval ? 'approval' as const : 'open' as const, events: [{ at: now, status: 'open' as const, reason: 'Manager breakdown; no completion claimed' }] }
+    return { id, parentId: parent.id, title: required(phase.title, 'phase title'), instruction: `${parent.instruction}\n\nCurrent phase: ${required(phase.instruction, 'phase instruction')}`, acceptance: `${required(phase.acceptance, 'phase acceptance')}${index === rawPhases.length - 1 ? `\nIntegrated original requirement: ${parent.acceptance}` : '\nAccept only this phase; the parent task remains open until integrated acceptance.'}`, acceptanceLevel: parent.acceptanceLevel, traceability: parent.traceability, kind: 'phase' as const, weight: 1, dependsOn, ownerRoleId: parent.ownerRoleId, requiresApproval, planned: true, status: requiresApproval ? 'approval' as const : 'open' as const, events: [{ at: now, status: 'open' as const, reason: 'Manager breakdown; no completion claimed' }] }
   })
   if (phases.some(phase => project.nodes.some(node => node.id === phase.id))) throw new Error('Manager breakdown already applied')
   project.nodes.splice(project.nodes.indexOf(parent) + 1, 0, ...phases)

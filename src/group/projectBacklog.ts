@@ -30,7 +30,7 @@ export function compileProjectBacklog(raw: unknown, now: number): OrchestrationF
     }
     if (task.requiresApproval === true) throw new Error(`BLOCKED: task ${taskId} requires user approval; do not submit until authorized`)
     seen.add(taskId)
-    return { id: taskId, instruction: string(task.instruction, 'instruction'), acceptance: string(task.acceptance, 'acceptance'), ownerRoleId, branch, worktree, dependsOn: dependsOn as string[] }
+    return { id: taskId, instruction: string(task.instruction, 'instruction'), acceptance: string(task.acceptance, 'acceptance'), ownerRoleId, branch, worktree, dependsOn: dependsOn as string[], execution: task.execution as ProjectBacklogTask['execution'] }
   })
   const project: ProjectBacklog = { id, chatId, managerRoleId, reviewerRoleId, tasks, maxAttempts: Number(maxAttempts) }
   const stages: OrchestrationStage[] = []

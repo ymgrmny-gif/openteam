@@ -1,5 +1,7 @@
 import { buildOrchestrationReviewMessageContent, buildOrchestrationRoleMessageContent } from '../group/orchestrationPrompts'
 import { parseReviewDecision } from '../group/orchestrationReview'
+import { validateArtifact, validateReadiness } from '../group/projectExecutionGate'
+import { applyManagerBreakdown } from '../group/projectWorkspace'
 import {
   DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS,
   DEFAULT_ORCHESTRATION_REVIEW_MAX_ATTEMPTS,
@@ -333,13 +335,42 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
         const parsed = parseReviewDecision(reply.content)
         if (parsed.ok && parsed.decision.decision === 'pass') {
           const evidence = JSON.parse(parsed.decision.rawJson) as Record<string, unknown>
-          const taskId = flow.stages[stageRun.stageIndex]?.projectTaskId
-          const workerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Worker'))
-          const workerPromptId = workerStage && Object.values(workerStage.roleRuns)[0]?.messageId
-          const workerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === workerPromptId && msg.roleId === flow.project?.tasks.find(task => task.id === taskId)?.ownerRoleId && msg.status === 'received')
-          if (!workerReply || evidence.taskId !== taskId || evidence.workerMessageId !== workerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) {
-            failRun(store, chat, run, 'BLOCKED: review PASS lacks correlated independent source/test/Git evidence', timestamp)
-            return { next: false as const }
+          const stage = flow.stages[stageRun.stageIndex]
+          const taskId = stage?.projectTaskId
+          const task = flow.project.tasks.find(item => item.id === taskId)!
+          if (stage.projectGate) {
+            const managerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Manager'))
+            const managerPromptId = managerStage?.roleRuns[flow.project.managerRoleId]?.messageId
+            const managerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === managerPromptId && msg.roleId === flow.project!.managerRoleId && msg.status === 'received')
+            try {
+              if (!managerReply || evidence.taskId !== taskId || evidence.planMessageId !== managerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) throw new Error('Review gate lacks exact correlated independent evidence')
+              if (stage.projectGate === 'readiness') validateReadiness(evidence, task)
+              else {
+                if (evidence.coverageVerified !== true) throw new Error('Original plan acceptance coverage is unverified')
+                const project = store.projectsById?.[flow.project.workspaceId!]
+                const node = project?.nodes.find(item => item.id === taskId)
+                if (!project || !node) throw new Error('Planning workspace missing')
+                const candidate = structuredClone(project)
+                applyManagerBreakdown(candidate, candidate.nodes.find(item => item.id === node.id)!, managerReply.content, timestamp)
+              }
+            } catch (error) {
+              failRun(store, chat, run, `BLOCKED: ${error instanceof Error ? error.message : String(error)}`, timestamp)
+              return { next: false as const }
+            }
+          } else {
+            const workerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Worker'))
+            const workerPromptId = workerStage && Object.values(workerStage.roleRuns)[0]?.messageId
+            const workerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === workerPromptId && msg.roleId === flow.project?.tasks.find(task => task.id === taskId)?.ownerRoleId && msg.status === 'received')
+            if (!workerReply || evidence.taskId !== taskId || evidence.workerMessageId !== workerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) {
+              failRun(store, chat, run, 'BLOCKED: review PASS lacks correlated independent source/test/Git evidence', timestamp)
+              return { next: false as const }
+            }
+            if (task.execution) {
+              try { validateArtifact(evidence, task) } catch (error) {
+                failRun(store, chat, run, `BLOCKED: ${error instanceof Error ? error.message : String(error)}`, timestamp)
+                return { next: false as const }
+              }
+            }
           }
         }
       }

@@ -134,10 +134,13 @@ export function createProjectWorkspaceView(deps: Dependencies) {
     const file = input('file', text.todo)
     file.accept = '.md,text/markdown,text/plain'
     const source = input('text', text.source)
+    const baseCommit = input('text', 'Git base SHA (40)')
+    baseCommit.pattern = '[a-f0-9]{40}'
     const manager = roleSelect(text.manager, /manager|yönetici|管理/i)
     const reviewer = roleSelect(text.reviewer, /reviewer|inceleme|复核/i)
     result.append(field(text.name, name), field(text.goals, goals), field(text.todo, file), field(text.source, source), field(text.manager, manager), field(text.reviewer, reviewer), element('h4', text.engineers))
-    const assignments: Array<{ enabled: HTMLInputElement; roleId: string; branch: HTMLInputElement; worktree: HTMLInputElement }> = []
+    result.append(field('Git base SHA (40)', baseCommit))
+    const assignments: Array<{ enabled: HTMLInputElement; roleId: string; branch: HTMLInputElement; worktree: HTMLInputElement; allowedPaths: HTMLInputElement }> = []
     for (const role of deps.getRoles()) {
       const enabled = input('checkbox', role.name)
       enabled.required = false
@@ -148,10 +151,13 @@ export function createProjectWorkspaceView(deps: Dependencies) {
       const worktree = input('text', `${role.name} ${text.worktree}`)
       worktree.required = false
       worktree.placeholder = 'C:/Projects/isolated-worktree'
+      const allowedPaths = input('text', `${role.name} allowed paths`)
+      allowedPaths.required = false
+      allowedPaths.placeholder = 'src/owned-module, docs/owned-file.md'
       const row = element('div', undefined, 'project-engineer-assignment')
-      row.append(field(role.name, enabled), field(text.branch, branch), field(text.worktree, worktree))
+      row.append(field(role.name, enabled), field(text.branch, branch), field(text.worktree, worktree), field('Allowed paths', allowedPaths))
       result.append(row)
-      assignments.push({ enabled, roleId: role.id, branch, worktree })
+      assignments.push({ enabled, roleId: role.id, branch, worktree, allowedPaths })
     }
     file.addEventListener('change', () => { if (file.files?.[0]) source.value = file.files[0].name })
     result.append(element('p', text.gate))
@@ -163,7 +169,7 @@ export function createProjectWorkspaceView(deps: Dependencies) {
       if (pending) return
       const selected = file.files?.[0]
       if (!selected) { deps.showError(text.todo); return }
-      void selected.text().then(todo => act('GROUP_PROJECT_IMPORT_TODO', { project: { id: `project-${crypto.randomUUID()}`, chatId: chat.id, name: name.value, goals: goals.value, sourcePath: source.value, todo, managerRoleId: manager.value, reviewerRoleId: reviewer.value, engineers: assignments.filter(item => item.enabled.checked).map(item => ({ roleId: item.roleId, branch: item.branch.value, worktree: item.worktree.value })) } })).catch(error => deps.showError(String(error)))
+      void selected.text().then(todo => act('GROUP_PROJECT_IMPORT_TODO', { project: { id: `project-${crypto.randomUUID()}`, chatId: chat.id, name: name.value, goals: goals.value, sourcePath: source.value, todo, managerRoleId: manager.value, reviewerRoleId: reviewer.value, execution: { baseCommit: baseCommit.value, allowedPaths: Object.fromEntries(assignments.filter(item => item.enabled.checked).map(item => [item.roleId, item.allowedPaths.value.split(',').map(path => path.trim()).filter(Boolean)])) }, engineers: assignments.filter(item => item.enabled.checked).map(item => ({ roleId: item.roleId, branch: item.branch.value, worktree: item.worktree.value })) } })).catch(error => deps.showError(String(error)))
     })
     return result
   }

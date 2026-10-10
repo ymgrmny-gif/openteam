@@ -112,6 +112,7 @@ export interface OrchestrationStage {
   roleIds: string[]
   review?: OrchestrationReviewConfig
   projectTaskId?: string
+  projectGate?: 'plan' | 'readiness'
 }
 
 export interface OrchestrationGraphNodePosition {
@@ -177,6 +178,24 @@ export interface ProjectBacklogTask {
   branch: string
   worktree: string
   dependsOn: string[]
+  execution?: ProjectExecutionContract
+}
+
+export interface ProjectExecutionContract {
+  baseCommit: string
+  allowedPaths: string[]
+  acceptanceLevel: 'source' | 'contract' | 'native'
+  traceability: string[]
+  dependencies: Array<{ taskId: string; commit: string }>
+}
+
+export interface ProjectArtifact {
+  commit: string
+  baseCommit: string
+  branch: string
+  worktree: string
+  changedPaths: string[]
+  acceptanceLevel: 'source' | 'contract' | 'native'
 }
 
 export type ProjectNodeStatus = 'open' | 'planning' | 'queued' | 'running' | 'review' | 'rework' | 'accepted' | 'blocked' | 'approval'
@@ -201,6 +220,9 @@ export interface ProjectTaskNode {
   reason?: string
   evidence?: string[]
   acceptedAt?: number
+  artifact?: ProjectArtifact
+  acceptanceLevel?: 'source' | 'contract' | 'native'
+  traceability?: string[]
   events: Array<{ at: number; status: ProjectNodeStatus; reason?: string }>
 }
 
@@ -214,6 +236,7 @@ export interface ProjectWorkspace {
   managerRoleId: string
   reviewerRoleId: string
   engineers: Array<{ roleId: string; branch: string; worktree: string }>
+  execution?: { baseCommit: string; allowedPaths: Record<string, string[]> }
   nodes: ProjectTaskNode[]
   status: 'draft' | 'running' | 'paused' | 'blocked' | 'completed'
   activeNodeId?: string

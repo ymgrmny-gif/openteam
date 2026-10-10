@@ -1,5 +1,17 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / GÜNCEL: bağımsız plan ve dependency Git kapıları
+
+- [x] Manager planı bağımsız Reviewer kabulünden önce yürütülmüyor; REWORK aynı işte, üç denemeyle sınırlı.
+- [x] Kod dispatch öncesi clean branch/worktree/full SHA/base ve tüm prerequisite commit ancestry için bağımsız readiness kapısı; eksik dependency işçiyi başlatmaz.
+- [x] Münhasır allowedPaths, commit artifact, source/contract/native kabul seviyesi ve D/F traceability; kapsam dışı/native sentetik kanıt reddi, ancestor inheritance ve reload regresyonları.
+- [x] `npm run verify` EXIT0: TypeScript + **759/759** (90 dosya) + build; diff check PASS. Son ayrıntılar `docs/PROJECT_EXECUTION_GATES_HANDOFF.md`.
+- [x] RemoteDesktop ile kurulu OpenTeam dist reload; canlı doctor EXIT0 ve yeni invalid-base import kapısının gerçek CLI reddi EXIT1. RD2 oda 24 mesaj / dört rol ready; yeni GPT task gönderilmedi.
+- [x] Kullanıcı onayıyla sekiz RD2 belge düzeltmesi ayrı yerel docs commit `150d7656aaf0d7722fb50abfca233aee10516cdf`; RD2 source/OS/V1/prod değişmedi. Ürün ilerlemesi **%15 değişmedi**.
+- [x] Tarihsel işi tekrar açmayan güncel sonlu backlog taslağı `docs/RD2_CURRENT_BACKLOG_20261010.md`; henüz import/execute yok.
+- [ ] Gerçek iki görevli GPT/tools E2E ve canlı delivery arası reload-resume **NOT_RUN**. Aşağıdaki eski extension-connect BLOCKED kayıtları tarihseldir; bağlantı/reload artık doğrulandı.
+- [ ] RD2 full Phase 0: D01-D22/F01-F57/X01-X03 matrisi + bağımsız kabul AÇIK. Feature çalışması bu kapıdan önce başlamaz; native işlemler ayrı açık yetkiyle yapılır.
+
 ## 2026-10-10 / Manager sonlu proje döngüsü
 
 - [x] Tek `task.post` ile kayıtlı orchestration run arasındaki eksik backlog/otomatik devam sınırı kodda doğrulandı.

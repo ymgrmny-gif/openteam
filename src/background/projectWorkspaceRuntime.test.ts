@@ -3,7 +3,8 @@ import { importProjectTodo, projectSummary } from '../group/projectWorkspace'
 import { createDefaultStore } from '../group/store'
 import type { OrchestrationRuntimeDependencies } from './orchestrationRuntime'
 
-const input = (todo: string) => ({ id: 'p', chatId: 'chat-1', name: 'Service', goals: 'Safe modular work', sourcePath: 'TODO.md', todo, managerRoleId: 'manager', reviewerRoleId: 'reviewer', engineers: [{ roleId: 'a', branch: 'codex/a', worktree: 'C:/work/a' }, { roleId: 'b', branch: 'codex/b', worktree: 'C:/work/b' }] })
+const baseCommit = 'a'.repeat(40)
+const input = (todo: string) => ({ id: 'p', chatId: 'chat-1', name: 'Service', goals: 'Safe modular work', sourcePath: 'TODO.md', todo, managerRoleId: 'manager', reviewerRoleId: 'reviewer', execution: { baseCommit, allowedPaths: { a: ['src/a'], b: ['src/b'] } }, engineers: [{ roleId: 'a', branch: 'codex/a', worktree: 'C:/work/a' }, { roleId: 'b', branch: 'codex/b', worktree: 'C:/work/b' }] })
 
 async function setup(todo: string) {
   vi.resetModules()
@@ -42,19 +43,63 @@ async function setup(todo: string) {
     await runtime.pump()
     return saved.result.id
   }
-  const deliver = async (taskId: string, owner = 'a') => {
-    await reply('manager', 'Bounded assignment')
-    const workerMessageId = await reply(owner, 'Actual source readback, tests exit 0 and local Git commit')
-    await reply('reviewer', JSON.stringify({ decision: 'pass', reason: 'Independently verified', failedCriteria: [], nextRoundInstruction: '', taskId, workerMessageId, verified: true, evidence: ['source readback', 'tests exit 0', 'Git ownership verified'] }))
+  const readiness = async (taskId: string, owner = 'a', override = {}) => {
+    const planMessageId = await reply('manager', 'Bounded assignment; read-only Git probes')
+    const { executionForNode } = await import('../group/projectExecutionGate')
+    const project = (await loadStore()).projectsById!.p
+    const expected = executionForNode(project, project.nodes.find(node => node.id === taskId)!)
+    await reply('reviewer', JSON.stringify({ decision: 'pass', reason: 'Read-only probes verified', failedCriteria: [], nextRoundInstruction: '', taskId, planMessageId, verified: true, evidence: ['Git status/branch/worktree/ancestor probes'], readiness: { branch: `codex/${owner}`, worktree: `C:/work/${owner}`, baseCommit, headCommit: baseCommit, clean: true, baseIsAncestor: true, allowedPaths: expected.allowedPaths, dependencies: expected.dependencies.map(dep => ({ ...dep, isAncestor: true })), ...override } }))
   }
-  return { deps, invoke, reply, deliver, getStore: loadStore, pump: () => runtime.pump(), reload: () => { runtime = createProjectWorkspaceRuntime(deps) } }
+  const acceptPlan = async (taskId: string, planMessageId: string, override = {}) => reply('reviewer', JSON.stringify({ decision: 'pass', reason: 'All original criteria covered', failedCriteria: [], nextRoundInstruction: '', taskId, planMessageId, verified: true, coverageVerified: true, evidence: ['Every original criterion and permission boundary reviewed'], ...override }))
+  const deliver = async (taskId: string, owner = 'a') => {
+    await readiness(taskId, owner)
+    const workerMessageId = await reply(owner, 'Actual source readback, tests exit 0 and local Git commit')
+    await reply('reviewer', JSON.stringify({ decision: 'pass', reason: 'Independently verified', failedCriteria: [], nextRoundInstruction: '', taskId, workerMessageId, verified: true, evidence: ['source readback', 'tests exit 0', 'Git ownership verified'], artifact: { commit: 'b'.repeat(40), baseCommit, branch: `codex/${owner}`, worktree: `C:/work/${owner}`, changedPaths: [`src/${owner}/index.ts`], acceptanceLevel: 'source' } }))
+  }
+  return { deps, invoke, reply, deliver, readiness, acceptPlan, getStore: loadStore, pump: () => runtime.pump(), reload: () => { runtime = createProjectWorkspaceRuntime(deps) } }
 }
 
 describe('project workspace runtime', () => {
+  it('blocks before worker dispatch when an accepted prerequisite is absent; reload cannot bypass', async () => {
+    const h = await setup('- [ ] A <!-- openteam: {"id":"a","executable":true} -->\n- [ ] B <!-- openteam: {"id":"b","dependsOn":["a"],"executable":true} -->')
+    await h.invoke('GROUP_PROJECT_EXECUTE')
+    await h.deliver('a')
+    await h.readiness('b', 'b', { dependencies: [] })
+    expect((await h.getStore()).projectsById!.p.status).toBe('blocked')
+    const workerBPrompts = vi.mocked(h.deps.sendPrompt).mock.calls.filter(([delivery]) => delivery.roleId === 'b')
+    expect(workerBPrompts).toHaveLength(0)
+    const sends = vi.mocked(h.deps.sendPrompt).mock.calls.length
+    h.reload()
+    await h.pump()
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(sends)
+  })
+  it('rejects plan PASS without verified original coverage and sends no worker assignment', async () => {
+    const h = await setup('- [ ] Service')
+    await h.invoke('GROUP_PROJECT_EXECUTE')
+    const source = await h.reply('manager', '{"phases":[{"title":"Partial","instruction":"Build","acceptance":"Tests"}]}')
+    await h.acceptPlan('todo-1', source, { coverageVerified: false })
+    const project = (await h.getStore()).projectsById!.p
+    expect(project.status).toBe('blocked')
+    expect(project.nodes).toHaveLength(1)
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(2)
+  })
+  it('reworks rejected plans within the original task and bound', async () => {
+    const h = await setup('- [ ] Service')
+    await h.invoke('GROUP_PROJECT_EXECUTE')
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await h.reply('manager', '{"phases":[{"title":"Partial","instruction":"Build","acceptance":"Tests"}]}')
+      await h.reply('reviewer', JSON.stringify({ decision: 'fail', reason: 'Original acceptance omitted', failedCriteria: ['coverage'], nextRoundInstruction: 'Cover the original requirement' }))
+    }
+    const project = (await h.getStore()).projectsById!.p
+    expect(project.status).toBe('blocked')
+    expect(project.nodes).toHaveLength(1)
+    expect(projectSummary(project).progressPercent).toBe(0)
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(6)
+  })
   it('keeps REWORK on the same phase and never increases accepted progress', async () => {
     const h = await setup('- [ ] Service <!-- openteam: {"executable":true} -->\n- [ ] Viewer')
     await h.invoke('GROUP_PROJECT_EXECUTE')
-    await h.reply('manager', 'Assignment')
+    await h.readiness('todo-1')
     await h.reply('a', 'Delivery')
     await h.reply('reviewer', JSON.stringify({ decision: 'fail', reason: 'Integration fails', failedCriteria: ['integration'], nextRoundInstruction: 'Repair integration' }))
     const project = (await h.getStore()).projectsById!.p
@@ -71,7 +116,9 @@ describe('project workspace runtime', () => {
     h.reload()
     await Promise.all([h.pump(), h.pump()])
     expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
-    await h.reply('manager', JSON.stringify({ phases: [{ title: 'Contract', instruction: 'Build contract', acceptance: 'Contract tests' }, { title: 'Integration', instruction: 'Integrate', acceptance: 'Integrated service tests' }] }))
+    const planMessageId = await h.reply('manager', JSON.stringify({ phases: [{ title: 'Contract', instruction: 'Build contract', acceptance: 'Contract tests' }, { title: 'Integration', instruction: 'Integrate', acceptance: 'Integrated service tests' }] }))
+    expect((await h.getStore()).projectsById!.p.nodes).toHaveLength(2)
+    await h.acceptPlan('todo-1', planMessageId)
     await h.deliver('todo-1/phase-1')
     expect(projectSummary((await h.getStore()).projectsById!.p).progressPercent).toBe(25)
     h.reload()
@@ -92,11 +139,12 @@ describe('project workspace runtime', () => {
   it('blocks malformed planning and cannot bypass the block with execute/resume', async () => {
     const h = await setup('- [ ] Service')
     await h.invoke('GROUP_PROJECT_EXECUTE')
-    await h.reply('manager', 'Done')
+    const planMessageId = await h.reply('manager', 'Done')
+    await h.acceptPlan('todo-1', planMessageId)
     expect((await h.getStore()).projectsById!.p.status).toBe('blocked')
     await expect(h.invoke('GROUP_PROJECT_EXECUTE')).rejects.toThrow()
     await expect(h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')).rejects.toThrow('Only paused')
-    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
+    expect(h.deps.sendPrompt).toHaveBeenCalledTimes(2)
   })
   it('does not dispatch permission-gated work', async () => {
     const h = await setup('- [ ] Install native service <!-- openteam: {"requiresApproval":true} -->')
@@ -112,7 +160,7 @@ describe('project workspace runtime', () => {
     expect(h.deps.sendPrompt).toHaveBeenCalledTimes(1)
     await h.invoke('GROUP_PROJECT_WORKSPACE_RESUME')
     expect(h.deps.sendPrompt).toHaveBeenCalledTimes(2)
-    expect((await h.getStore()).projectsById!.p.activeNodeId).toBe('todo-1/phase-1')
+    expect((await h.getStore()).projectsById!.p.activeNodeId).toBe('todo-1')
   })
   it('reimport is idempotent and preserves changed source as an explicit conflict', async () => {
     const h = await setup('- [ ] Service')
