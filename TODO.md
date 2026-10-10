@@ -100,3 +100,15 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] İki çökmüş OpenTeam sekmesi doğrudan yalnız o sekmelerde Ctrl+W ile kapatıldı; çalışan OpenTeam sekmesi, görev ve roller korundu. Son aktif UI OOM göstermiyor.
 - [ ] Sadece açık tek OpenTeam odasıyla kontrollü bellek ölçümü + iframe mount/unmount/primary-lifecycle yük testi; tab başına tüketim ve Chrome OOM kök nedeni doğrulanıp düzeltilecek.
 - [ ] EngineerA `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` hâlâ `pending`, rol reload sonrası `ready`, sandbox boş. Eski promptu yeniden gönderme; kaynak sohbet/dispatch kanıtı incele, gerekiyorsa explicit failed/cancel reconciliation sonrası yeni kontrollü tek işçi denemesi yap.
+
+## 2026-10-10 / GPT yazılım ekibi canlı kabulü — PASS_SCOPED
+
+- [x] OpenTeam Chrome OOM yeniden üretildi; iki çökmüş kopya sekme kapatıldı, aktif oda korundu.
+- [x] Eski oda iframe'leri boşta kalınca unload ediliyor; aktif işler ve 10 dakikadan yeni pending/sent teslimler korunuyor. Tarihi eski pending teslimler renderer tutmuyor. 716/716 Vitest + TS/build PASS.
+- [x] GPT EngineerA gerçek write/read/test/Git commit PASS; `hello.mjs`, `hello.test.mjs`, Node 2/2 exit0, sandbox commit `4b2da0fd359b0659ebc16b698b7de612b344d149`.
+- [x] GPT EngineerB ayrı sandbox gerçek write/read/test/Git init PASS; `slug.mjs`, `slug.test.mjs`, Node 2/2 exit0. Commit istenmedi.
+- [x] GPT Manager dosyaları/testleri bağımsız doğruladı; `PASS_SCOPED`, teslim `received`.
+- [x] GPT IndependentReviewer kaynak, test, Git, sınır/negatif koşulları bağımsız doğruladı; `PASS_SCOPED`, teslim `received`.
+- [x] Kanıt raporu: `docs/OPENTEAM_GPT_WORKFORCE_ACCEPTANCE_20261010.md`.
+- [ ] Tarihi `msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b` task `pending` ledger temizlenmeli, YENİDEN GÖNDERİLMEMELİ. Bu kayıt yeni görevleri engellemiyor.
+- [ ] RD2 Phase0 D01–D22/V1 parite ve native Windows E2E bağımsız kabulü hâlâ `REWORK`; RD2 main değiştirilmedi.

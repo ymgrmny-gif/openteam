@@ -71,8 +71,11 @@ const iframeHost = createIframeHost({
     }
     return chat.messageIds.some(messageId => {
       const msg = store.messagesById[messageId]
-      return msg?.type === 'user' && Object.values(msg.deliveryStatus ?? {})
-        .some(status => status === 'pending' || status === 'sent')
+      // Abandoned delivery markers after a tab crash must not pin old GPT
+      // renderer processes in memory indefinitely.
+      return msg?.type === 'user' && Date.now() - msg.createdAt < 600_000 &&
+        Object.values(msg.deliveryStatus ?? {})
+          .some(status => status === 'pending' || status === 'sent')
     })
   },
   onEvent(event) {
