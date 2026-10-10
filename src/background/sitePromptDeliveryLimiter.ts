@@ -1,6 +1,9 @@
 import type { ChatSite } from '../group/types'
 
 const DEFAULT_MAX_ACTIVE_BY_SITE: Partial<Record<ChatSite, number>> = {
+  // ChatGPT reuses draft state across same-origin embedded frames. Until each
+  // role has its own conversation URL, serialize sends and reply ownership.
+  chatgpt: 1,
   deepseek: 2,
 }
 

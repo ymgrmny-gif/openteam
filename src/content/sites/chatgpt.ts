@@ -16,8 +16,10 @@ const CHATGPT_SELECTORS = {
   // ChatGPT changes its form wrappers and editor IDs. Only consider identifiable composer fields.
   editor: '#prompt-textarea[contenteditable="true"], [data-testid="composer-input"][contenteditable="true"], form .ProseMirror[contenteditable="true"], form [role="textbox"][contenteditable="true"], textarea#prompt-textarea, textarea[data-testid="composer-input"]',
   sendButton:
-    'button[data-testid="send-button"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"]',
+    '#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-send-button"], button[aria-label*="Gönder"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"], button[title="Gönder"]',
   response: '[data-message-author-role="assistant"]',
+  // Current ChatGPT also renders assistant prose without the legacy author attribute.
+  modernResponse: '[data-testid^="conversation-turn-"] .markdown, main .markdown',
   imageResponse: '[data-conversation-screenshot-content]',
   generatedImage:
     'img[src*="/backend-api/estuary/content"], [data-testid*="image"] img[src], [class*="imagegen-image"] img[src]',
@@ -37,12 +39,14 @@ const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'BUTTON', 'TEXTAREA', 'SVG'])
 interface ChatGptAdapterOptions {
   href?: string
   inputTimeoutMs?: number
+  sendAckTimeoutMs?: number
   clipboardTimeoutMs?: number
   clipboardPollMs?: number
 }
 
 export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatSiteAdapter {
   const inputTimeoutMs = options.inputTimeoutMs ?? DEFAULT_INPUT_TIMEOUT_MS
+  const sendAckTimeoutMs = options.sendAckTimeoutMs ?? Math.max(inputTimeoutMs, 30_000)
   const clipboardTimeoutMs = options.clipboardTimeoutMs ?? DEFAULT_CLIPBOARD_TIMEOUT_MS
   const clipboardPollMs = options.clipboardPollMs ?? DEFAULT_CLIPBOARD_POLL_MS
 
@@ -68,10 +72,14 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
         !response.closest(CHATGPT_SELECTORS.userTurn) &&
         isGeneratedImageResponse(response),
       )
-    return uniqueElements([
-      ...(turnResponses.length > 0 ? turnResponses : [...document.querySelectorAll(CHATGPT_SELECTORS.response)]),
-      ...standaloneImageResponses,
-    ])
+    const legacyResponses = turnResponses.length > 0
+      ? turnResponses
+      : [...document.querySelectorAll(CHATGPT_SELECTORS.response)]
+    const textResponses = legacyResponses.length > 0
+      ? legacyResponses
+      : [...document.querySelectorAll(CHATGPT_SELECTORS.modernResponse)]
+        .filter(element => !element.closest(CHATGPT_SELECTORS.userTurn))
+    return uniqueElements([...textResponses, ...standaloneImageResponses])
   }
 
   function getAllAssistantReplies(): string[] {
@@ -83,24 +91,34 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     if (isChatGptGenerating()) throw new Error('ChatGPT is already generating; prompt not sent')
 
     const editor = await waitForUniqueComposer(inputTimeoutMs)
-    // Existing user drafts belong to the user, including drafts in iframe sessions.
-    if (readComposerText(editor)) throw new Error('ChatGPT composer contains an existing draft; prompt not sent')
-
-    writeComposerText(editor, content)
-    if (readComposerText(editor) !== content.trim()) {
+    // Never replace arbitrary drafts; recover only an exact draft fingerprint
+    // previously recorded by OpenTeam in this same embedded tab session.
+    const existingDraft = readComposerText(editor)
+    if (existingDraft && !await matchesOwnedDraft(existingDraft)) {
+      throw new Error('ChatGPT composer contains an existing draft; prompt not sent')
+    }
+    if (existingDraft && canonicalComposerText(existingDraft) !== canonicalComposerText(content)) {
+      resetOwnedComposer(editor)
+    }
+    if (canonicalComposerText(readComposerText(editor)) !== canonicalComposerText(content)) writeComposerText(editor, content)
+    if (canonicalComposerText(readComposerText(editor)) !== canonicalComposerText(content)) {
       throw new Error('ChatGPT editor did not accept the prompt text')
     }
+    await rememberOwnedDraft(content)
 
     if (!autoSend) return
 
     const previousUserTurns = document.querySelectorAll(CHATGPT_SELECTORS.userTurn).length
+    const previousAssistantReplies = getAllAssistantReplies().length
+    const previousConversationId = getConversationSnapshot().conversationId
     const sendButton = await waitForComposerSendButton(editor, inputTimeoutMs)
-    if (readComposerText(editor) !== content.trim() || isChatGptGenerating()) {
+    if (canonicalComposerText(readComposerText(editor)) !== canonicalComposerText(content) || isChatGptGenerating()) {
       throw new Error('ChatGPT composer changed before send; prompt not sent')
     }
     sendButton.click()
     // A dispatched click is not proof of delivery. Do not silently retry an uncertain send.
-    await waitForSendAcknowledgement(content, previousUserTurns, inputTimeoutMs)
+    await waitForSendAcknowledgement(content, previousUserTurns, previousAssistantReplies, previousConversationId, sendAckTimeoutMs, getAllAssistantReplies)
+    forgetOwnedDraft()
   }
 
   return {
@@ -122,6 +140,81 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
   }
 }
 
+
+function canonicalComposerText(text: string): string {
+  return text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+const OWNED_CHATGPT_DRAFT_KEY = 'openteam:chatgpt:owned-draft:v1'
+const OWNED_CHATGPT_DRAFT_TTL_MS = 20 * 60_000
+
+interface OwnedChatGptDraft {
+  version: 1
+  digest: string
+  createdAt: number
+}
+
+async function fingerprintDraft(text: string): Promise<string | undefined> {
+  if (!globalThis.crypto?.subtle) return undefined
+  const normalized = canonicalComposerText(text)
+  const hash = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+  return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function matchesOwnedDraft(text: string): Promise<boolean> {
+  try {
+    const raw = sessionStorage.getItem(OWNED_CHATGPT_DRAFT_KEY)
+    if (!raw) return false
+    const owned: unknown = JSON.parse(raw)
+    if (!owned || typeof owned !== 'object') return false
+    const record = owned as Partial<OwnedChatGptDraft>
+    if (record.version !== 1 || typeof record.createdAt !== 'number' ||
+        !Number.isFinite(record.createdAt) || typeof record.digest !== 'string' ||
+        Date.now() - record.createdAt < 0 || Date.now() - record.createdAt > OWNED_CHATGPT_DRAFT_TTL_MS) return false
+    const digest = await fingerprintDraft(text)
+    return Boolean(digest && record.digest === digest)
+  } catch {
+    return false
+  }
+}
+
+async function rememberOwnedDraft(text: string): Promise<void> {
+  try {
+    const digest = await fingerprintDraft(text)
+    if (!digest) return
+    sessionStorage.setItem(OWNED_CHATGPT_DRAFT_KEY, JSON.stringify({
+      version: 1,
+      digest,
+      createdAt: Date.now(),
+    } satisfies OwnedChatGptDraft))
+  } catch {
+    // Draft ownership cannot be established; never clear an unknown draft later.
+  }
+}
+
+function forgetOwnedDraft(): void {
+  try {
+    sessionStorage.removeItem(OWNED_CHATGPT_DRAFT_KEY)
+  } catch {
+    // Browsers may disallow frame storage. Preserve fail-closed behavior.
+  }
+}
+
+function resetOwnedComposer(editor: ComposerEditor): void {
+  if (editor instanceof HTMLTextAreaElement) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    if (!setter) throw new Error('ChatGPT owned textarea cannot be reset safely')
+    setter.call(editor, '')
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+  } else {
+    editor.focus()
+    if (!editor.ownerDocument.execCommand('selectAll', false) ||
+        !editor.ownerDocument.execCommand('delete', false)) {
+      throw new Error('ChatGPT owned draft could not be cleared safely')
+    }
+  }
+  if (readComposerText(editor)) throw new Error('ChatGPT owned draft remained after reset')
+}
 
 type ComposerEditor = HTMLElement
 
@@ -184,12 +277,23 @@ function writeComposerText(editor: ComposerEditor, content: string): void {
 }
 
 async function waitForComposerSendButton(editor: ComposerEditor, timeoutMs: number): Promise<HTMLButtonElement> {
-  const scope = editor.closest('form') ?? editor.closest('[data-testid="composer"]') ?? document
+  // The 2026 ChatGPT composer can render its submit control outside the editor form.
+  // Search the local form first, then the full page with strict button identity.
+  const localScope = editor.closest('form') ?? editor.closest('[data-testid="composer"]')
   const findButton = (): HTMLButtonElement | null => {
-    const candidates = [...scope.querySelectorAll<HTMLButtonElement>(CHATGPT_SELECTORS.sendButton)]
-      .filter(button => isClickableButton(button) && !button.closest('[hidden], [aria-hidden="true"]'))
-    if (candidates.length > 1) throw new Error('ChatGPT has ambiguous send buttons; prompt not sent')
-    return candidates[0] ?? null
+    const isSafeSendButton = (button: HTMLButtonElement) => {
+      if (!isClickableButton(button) || button.closest('[hidden], [aria-hidden="true"]')) return false
+      const style = window.getComputedStyle(button)
+      return style.display !== 'none' && style.visibility !== 'hidden' &&
+        style.opacity !== '0' && style.pointerEvents !== 'none'
+    }
+    const fromScope = (scope: ParentNode): HTMLButtonElement | null => {
+      const candidates = [...scope.querySelectorAll<HTMLButtonElement>(CHATGPT_SELECTORS.sendButton)]
+        .filter(isSafeSendButton)
+      if (candidates.length > 1) throw new Error('ChatGPT has ambiguous send buttons; prompt not sent')
+      return candidates[0] ?? null
+    }
+    return (localScope ? fromScope(localScope) : null) ?? fromScope(document)
   }
   const immediate = findButton()
   if (immediate) return immediate
@@ -213,11 +317,28 @@ async function waitForComposerSendButton(editor: ComposerEditor, timeoutMs: numb
   })
 }
 
-async function waitForSendAcknowledgement(content: string, previousUserTurns: number, timeoutMs: number): Promise<void> {
-  const expected = content.replace(/\s+/g, ' ').trim()
+async function waitForSendAcknowledgement(
+  content: string,
+  previousUserTurns: number,
+  previousAssistantReplies: number,
+  previousConversationId: string | undefined,
+  timeoutMs: number,
+  readAssistantReplies: () => string[],
+): Promise<void> {
+  const expected = canonicalComposerText(content)
   const acknowledged = () => {
     const newUserTurns = [...document.querySelectorAll(CHATGPT_SELECTORS.userTurn)].slice(previousUserTurns)
-    return newUserTurns.some(turn => (turn.textContent ?? '').replace(/\s+/g, ' ').trim().includes(expected))
+    if (newUserTurns.some(turn => canonicalComposerText(turn.textContent ?? '').includes(expected))) return true
+    // ChatGPT can render the user message with a newer/collapsed DOM structure.
+    // A *new* real assistant reply plus emptied composer is independent evidence
+    // that this exact click was accepted; never count an existing old reply.
+    // Route transitions often detach the old ProseMirror node; resolve its live replacement.
+    const activeComposer = findComposer()
+    if (!activeComposer || readComposerText(activeComposer) !== '') return false
+    if (readAssistantReplies().length > previousAssistantReplies) return true
+    if (isChatGptGenerating()) return true
+    const currentConversationId = getChatGptConversationLocation(location.href).conversationId
+    return Boolean(currentConversationId && currentConversationId !== previousConversationId)
   }
   if (acknowledged()) return
   return new Promise((resolve, reject) => {
@@ -335,6 +456,9 @@ function findResponseContainer(element: Element | null): Element | null {
 
   const textResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.response)
   if (textResponse) return textResponse
+
+  const modernResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.modernResponse)
+  if (modernResponse && !modernResponse.closest(CHATGPT_SELECTORS.userTurn)) return modernResponse
 
   const imageResponse = findClosestMatchingAncestor(element, CHATGPT_SELECTORS.imageResponse)
   return imageResponse &&

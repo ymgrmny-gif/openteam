@@ -229,6 +229,14 @@ function handleSendPromptMessage(message: Extract<BackgroundToRoleMessage, { typ
   const promptChatId = message.chatId || roleSession.getAssignedChatId()
   const promptRoleId = message.roleId || roleSession.getAssignedRole()?.roleId || ''
   const isRetry = message.isRetry ?? false
+  // A live iframe may retain a stale frameId across a role/chat switch.
+  // Never deliver work if the runtime role assignment does not match the message.
+  const assigned = roleSession.getAssignedRole()
+  if (!assigned || assigned.chatId !== message.chatId || assigned.roleId !== message.roleId) {
+    log.warn('prompt:role-binding-mismatch', { expectedChatId: message.chatId, expectedRoleId: message.roleId, assigned })
+    sendResponse({ ok: false, error: 'OpenTeam role binding mismatch; prompt not sent' })
+    return
+  }
   log.warn('orchestration-diagnostic:content-send-prompt:received', {
     chatId: promptChatId,
     roleId: promptRoleId,

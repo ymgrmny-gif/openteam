@@ -19,6 +19,24 @@ describe('content entrypoint site status heartbeat', () => {
     delete (window as unknown as Record<string, unknown>).__OPENTEAM_LOADED__
   })
 
+  it('rejects prompt delivery when the frame has no matching role assignment', async () => {
+    await bootContentEntrypoint({ embedded: true, directEmbedded: true })
+    const listener = vi.mocked(chrome.runtime.onMessage.addListener).mock.calls[0]?.[0]
+    expect(listener).toBeTypeOf('function')
+    const response = vi.fn()
+    listener?.({
+      type: 'TEAM_SEND_PROMPT',
+      chatId: 'other-chat',
+      roleId: 'other-role',
+      messageId: 'message-1',
+      content: 'MUST NOT SEND',
+    }, {} as chrome.runtime.MessageSender, response)
+    expect(response).toHaveBeenCalledWith({
+      ok: false,
+      error: 'OpenTeam role binding mismatch; prompt not sent',
+    })
+  })
+
   it('starts site status heartbeat inside direct role frames', async () => {
     const sendRuntimeMessage = await bootContentEntrypoint({ embedded: true, directEmbedded: true })
 

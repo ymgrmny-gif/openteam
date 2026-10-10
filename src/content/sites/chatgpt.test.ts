@@ -1,19 +1,34 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
+import { TextEncoder as NodeTextEncoder } from 'node:util'
 import { createChatGptAdapter } from './chatgpt'
 
 const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand')
+const originalSubtle = Object.getOwnPropertyDescriptor(window.crypto, 'subtle')
 
 beforeEach(() => {
+  sessionStorage.clear()
+  vi.stubGlobal('TextEncoder', NodeTextEncoder)
+  Object.defineProperty(window.crypto, 'subtle', {
+    configurable: true,
+    value: { digest: async (_algorithm: string, data: ArrayBuffer) => createHash('sha256').update(new Uint8Array(data)).digest() },
+  })
   // JSDOM has no browser editing engine; this stub models a native contenteditable
   // transaction, including the browser-produced input event.
   Object.defineProperty(document, 'execCommand', {
     configurable: true,
     value: vi.fn((command: string, _ui: boolean, content: string) => {
-      if (command !== 'insertText') return false
       const editor = document.activeElement as HTMLElement | null
       if (!editor || editor.getAttribute('contenteditable') !== 'true') return false
+      if (command === 'selectAll') return true
+      if (command === 'delete') {
+        editor.replaceChildren()
+        editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+        return true
+      }
+      if (command !== 'insertText') return false
       const block = document.createElement('p')
       block.textContent = content
       editor.replaceChildren(block)
@@ -23,6 +38,10 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
+  sessionStorage.clear()
+  if (originalSubtle) Object.defineProperty(window.crypto, 'subtle', originalSubtle)
+  else Reflect.deleteProperty(window.crypto, 'subtle')
+  vi.unstubAllGlobals()
   if (originalExecCommand) Object.defineProperty(document, 'execCommand', originalExecCommand)
   else Reflect.deleteProperty(document, 'execCommand')
 })
@@ -125,6 +144,23 @@ describe('ChatGPT site adapter', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+
+  it('finds the localized composer submit control even outside the editor form', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div></form>
+      <button type="button" id="composer-submit-button" aria-label="Gönder">➤</button>
+    `
+    const button = document.querySelector<HTMLButtonElement>('button')!
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const click = vi.fn(() => {
+      editor.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend', '<section data-turn="user">test prompt</section>')
+    })
+    button.addEventListener('click', click)
+    await createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('test prompt')
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
   it('supports a native textarea composer without injecting HTML', async () => {
     document.body.innerHTML = '<textarea data-testid="composer-input"></textarea>'
     await createChatGptAdapter({ inputTimeoutMs: 30 }).fillAndSend('<plain text>', false)
@@ -161,6 +197,68 @@ describe('ChatGPT site adapter', () => {
     expect(document.querySelector('[contenteditable]')?.textContent).toBe('Unrelated editor')
   })
 
+
+  it('acknowledges a sent ChatGPT prompt when a new assistant reply arrives after a collapsed user turn', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" id="composer-submit-button" aria-label="Gönder">Send</button></form>
+    `
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const send = document.querySelector<HTMLButtonElement>('button')!
+    send.addEventListener('click', () => {
+      editor.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend',
+        '<section data-turn="assistant" data-testid="conversation-turn-2">' +
+        '<div data-message-author-role="assistant"><div class="markdown"><p>PONG</p></div></div></section>')
+    })
+    await createChatGptAdapter({ inputTimeoutMs: 200, sendAckTimeoutMs: 250 }).fillAndSend('sandbox test PONG')
+    expect(send.disabled).toBe(false)
+  })
+
+  it('does not treat an old assistant response as proof of new prompt delivery', async () => {
+    document.body.innerHTML = `
+      <section data-turn="assistant" data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant"><div class="markdown"><p>Old reply</p></div></div>
+      </section>
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" id="composer-submit-button" aria-label="Gönder">Send</button></form>
+    `
+    document.querySelector('button')?.addEventListener('click', () => {
+      document.querySelector<HTMLElement>('#prompt-textarea')?.replaceChildren()
+    })
+    await expect(createChatGptAdapter({ inputTimeoutMs: 200, sendAckTimeoutMs: 250 }).fillAndSend('test'))
+      .rejects.toThrow('not acknowledged')
+  })
+
+
+  it('acknowledges an accepted send when new ChatGPT generation begins and editor empties', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" id="composer-submit-button" aria-label="Gönder">Send</button></form>
+    `
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    document.querySelector('button')?.addEventListener('click', () => {
+      editor.replaceChildren()
+      document.body.insertAdjacentHTML('beforeend', '<div class="result-streaming" aria-busy="true"></div>')
+    })
+    await createChatGptAdapter({ inputTimeoutMs: 150, sendAckTimeoutMs: 200 }).fillAndSend('active generation check')
+  })
+
+  it('checks the live replacement composer after navigation rather than stale detached node', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" id="composer-submit-button" aria-label="Gönder">Send</button></form>
+    `
+    const send = document.querySelector<HTMLButtonElement>('button')!
+    send.addEventListener('click', () => {
+      document.querySelector('form')?.remove()
+      document.body.insertAdjacentHTML('beforeend',
+        '<form><div id="prompt-textarea" contenteditable="true"></div></form>' +
+        '<div class="result-streaming" aria-busy="true"></div>')
+    })
+    await createChatGptAdapter({ inputTimeoutMs: 150, sendAckTimeoutMs: 200 }).fillAndSend('route changed')
+  })
+
   it('does not claim delivery when send was clicked but neither draft nor conversation changes', async () => {
     document.body.innerHTML = `
       <form><div id="prompt-textarea" contenteditable="true"></div>
@@ -168,7 +266,7 @@ describe('ChatGPT site adapter', () => {
     `
     const click = vi.fn()
     document.querySelector('button')?.addEventListener('click', click)
-    await expect(createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('test'))
+    await expect(createChatGptAdapter({ inputTimeoutMs: 250, sendAckTimeoutMs: 250 }).fillAndSend('test'))
       .rejects.toThrow('not acknowledged')
     expect(click).toHaveBeenCalledTimes(1)
   })
@@ -183,8 +281,82 @@ describe('ChatGPT site adapter', () => {
       document.querySelector<HTMLElement>('#prompt-textarea')?.replaceChildren()
       document.body.insertAdjacentHTML('beforeend', '<section data-turn="user">unrelated user message</section>')
     })
-    await expect(createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('expected prompt'))
+    await expect(createChatGptAdapter({ inputTimeoutMs: 250, sendAckTimeoutMs: 250 }).fillAndSend('expected prompt'))
       .rejects.toThrow('not acknowledged')
+  })
+
+
+
+  it('accepts native ProseMirror readback that differs only in line breaks and whitespace', async () => {
+    document.body.innerHTML = '<form><div id="prompt-textarea" contenteditable="true"></div></form>'
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    Object.defineProperty(editor, 'innerText', {
+      configurable: true,
+      get: () => editor.textContent?.replace(/ /g, '\n\n ') ?? '',
+    })
+    await createChatGptAdapter({ inputTimeoutMs: 60 }).fillAndSend('first second third', false)
+    expect(editor.textContent).toBe('first second third')
+    expect(sessionStorage.getItem('openteam:chatgpt:owned-draft:v1')).toContain('"digest"')
+  })
+
+  it('recovers only a previously fingerprinted OpenTeam draft after interrupted send', async () => {
+    document.body.innerHTML = '<form><div id="prompt-textarea" contenteditable="true"></div></form>'
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const adapter = createChatGptAdapter()
+    await adapter.fillAndSend('first OpenTeam generated prompt', false)
+    const saved = sessionStorage.getItem('openteam:chatgpt:owned-draft:v1')
+    expect(saved).toContain('"digest"')
+    expect(saved).not.toContain('first OpenTeam generated prompt')
+    await adapter.fillAndSend('second OpenTeam generated prompt', false)
+    expect(editor.textContent).toBe('second OpenTeam generated prompt')
+  })
+
+  it('fails closed when a foreign draft replaced a previously fingerprinted app draft', async () => {
+    document.body.innerHTML = '<form><div id="prompt-textarea" contenteditable="true"></div></form>'
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const adapter = createChatGptAdapter()
+    await adapter.fillAndSend('previously owned draft', false)
+    editor.textContent = 'a different draft typed by the user'
+    await expect(adapter.fillAndSend('new task', false)).rejects.toThrow('existing draft')
+    expect(editor.textContent).toBe('a different draft typed by the user')
+  })
+
+  it('does not recover an app draft when the ownership record has expired', async () => {
+    document.body.innerHTML = '<form><div id="prompt-textarea" contenteditable="true"></div></form>'
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const adapter = createChatGptAdapter()
+    await adapter.fillAndSend('owned but expired draft', false)
+    const key = 'openteam:chatgpt:owned-draft:v1'
+    const record = JSON.parse(sessionStorage.getItem(key)!)
+    sessionStorage.setItem(key, JSON.stringify({ ...record, createdAt: Date.now() - 60 * 60_000 }))
+    await expect(adapter.fillAndSend('different task', false)).rejects.toThrow('existing draft')
+    expect(editor.textContent).toBe('owned but expired draft')
+  })
+
+
+  it('finds modern ChatGPT assistant replies without legacy author attributes', () => {
+    document.body.innerHTML = `
+      <main>
+        <article data-testid="conversation-turn-1"><div class="whitespace-pre-wrap">Prompt from user</div></article>
+        <article data-testid="conversation-turn-2">
+          <div class="markdown"><p>PONG42</p></div>
+          <button aria-label="Copy response">Copy</button>
+        </article>
+      </main>
+    `
+    const adapter = createChatGptAdapter()
+    expect(adapter.getAllAssistantReplies()).toEqual(['PONG42'])
+    const text = document.querySelector('.markdown p')!
+    expect(adapter.findResponseContainer(text)).toBe(document.querySelector('.markdown'))
+  })
+
+  it('never interprets modern markdown inside an explicit user message as an assistant reply', () => {
+    document.body.innerHTML = `
+      <main><article data-turn="user" data-testid="conversation-turn-1">
+        <div class="markdown"><p>user-authored markdown only</p></div>
+      </article></main>
+    `
+    expect(createChatGptAdapter().getAllAssistantReplies()).toEqual([])
   })
 
   it('reads assistant markdown replies without action button text', () => {
