@@ -32,15 +32,21 @@ export function buildOrchestrationRoleMessageContent(input: BuildOrchestrationRo
 
 export function buildOrchestrationReviewMessageContent(input: BuildOrchestrationReviewMessageContentInput): string {
   const language = normalizeLanguage(input.language)
+  // Readiness occurs BEFORE the writer is dispatched. Inherited task delivery
+  // acceptance must not require its future artifact at this gate, including
+  // durable snapshots created before the prompt correction was installed.
+  const description = input.currentStage.projectGate === 'readiness'
+    ? `PRE-DELIVERY READINESS ONLY for task ${input.currentStage.projectTaskId}. The completed source below is the Manager assignment, not a worker delivery. Independently check clean worktree, ownership, base/dependency ancestry and scope before authorizing worker dispatch. The worker has not run yet: an absent output/report/new delivery commit is expected and is NOT a reason to reject readiness. Do not evaluate final task acceptance here, create files, integrate or dispatch work. A readiness PASS authorizes the next writer stage; it does not accept the project deliverable. If the assignment is only intent or lacks concrete scope, reject that assignment explicitly rather than demand the worker artifact. Use only the readiness criteria below.`
+    : input.currentStage.description
   if (language === 'tr') return joinSections([
     `Görev:\n${input.userTask}`,
-    input.currentStage.description ? `İnceleme adımının görevi:\n${input.currentStage.description}` : undefined,
+    description ? `İnceleme adımının görevi:\n${description}` : undefined,
     `Kabul ölçütleri:\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || 'Sonucun görev gereksinimlerini karşılayıp karşılamadığını değerlendir.'}`,
     buildOrchestrationReviewResponseInstruction(language),
   ])
   return joinSections([
     `${language === 'en' ? 'Current task:' : '当前任务：'}\n${input.userTask}`,
-    input.currentStage.description ? `${language === 'en' ? 'Current review node task:' : '当前审核节点任务：'}\n${input.currentStage.description}` : undefined,
+    description ? `${language === 'en' ? 'Current review node task:' : '当前审核节点任务：'}\n${description}` : undefined,
     `${language === 'en' ? 'Review criteria:' : '审核标准：'}\n${input.reviewCriteria?.trim() || input.currentStage.review?.instructions?.trim() || (language === 'en' ? 'Decide whether the current result satisfies the task requirements.' : '判断当前结果是否满足任务要求。')}`,
     buildOrchestrationReviewResponseInstruction(language),
   ])

@@ -3,6 +3,21 @@ import { buildOrchestrationReviewMessageContent, buildOrchestrationRoleMessageCo
 import type { OrchestrationReviewResult, OrchestrationStage } from './types'
 
 describe('orchestration message content builders', () => {
+  it.each(['tr', 'en', 'zh-CN'] as const)('does not demand the future delivery at a persisted readiness gate (%s)', language => {
+    const stage: OrchestrationStage = { ...makeReviewStage(), projectGate: 'readiness', projectTaskId: 'audit', description: 'Acceptance: final report must exist with 22 rows and a new delivery commit.' }
+    const content = buildOrchestrationReviewMessageContent({ userTask: 'Bounded audit', currentStage: stage, reviewCriteria: 'Probe clean Git, exact branch/worktree, base ancestry and dependencies.', language })
+    expect(content).toContain('PRE-DELIVERY READINESS ONLY')
+    expect(content).toContain('an absent output/report/new delivery commit is expected')
+    expect(content).toContain('only intent or lacks concrete scope')
+    expect(content).not.toContain('Acceptance: final report must exist')
+    expect(content).toContain('Probe clean Git, exact branch/worktree, base ancestry and dependencies.')
+  })
+  it('preserves full artifact acceptance for final delivery review', () => {
+    const stage = { ...makeReviewStage(), description: 'Acceptance: final report and new delivery commit required.' }
+    const content = buildOrchestrationReviewMessageContent({ userTask: 'Audit', currentStage: stage, language: 'tr' })
+    expect(content).toContain(stage.description)
+    expect(content).not.toContain('PRE-DELIVERY READINESS ONLY')
+  })
   it('builds a role-node group message without duplicating persona or group context logic', () => {
     const content = buildOrchestrationRoleMessageContent({
       userTask: 'Create a launch plan.',

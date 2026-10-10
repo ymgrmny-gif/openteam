@@ -1,5 +1,13 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / CANLI İLETİŞİM KONTROLÜ VE PUSH
+
+- [x] User authorized push. OpenTeam fork `https://github.com/ymgrmny-gif/openteam` created; feature branch pushed/remote SHA verified at `7c18a62`. Third-party origin afumu/openteam untouched. RD2 docs pushed to owned origin/main `ffd50f0` and remote SHA verified.
+- [x] Real Manager delivery received, correlated response `msg-4ebcfb8c-0765-4243-a5cc-d0ae0c46e003`; automatic readiness Reviewer delivery and fail response `msg-9f8af698-4aa3-4734-8eb2-56c3b44700e0` observed. Fail automatically returned to Manager. Routing works; fully correct workflow is NOT accepted.
+- [x] Actual prompt defect: readiness stage inherited final task acceptance/description and Reviewer demanded an Engineer report/commit before writer dispatch. `orchestrationPrompts.ts` now renders readiness-only scope even for persisted flow snapshots; final delivery review retains full artifact acceptance. Missing future artifact is expected; incomplete Manager assignment must still be rejected.
+- [x] `npm run verify` exit0: **770/770 / 91 files**, TypeScript/build PASS. Four focused regressions cover tr/en/zh persisted readiness gates and preserved final acceptance.
+- [ ] Workspace safely **paused**, 0/2 accepted; EngineerA/B ready and audit worktrees clean/no reports. Original automatic REWORK prompt `msg-c63eb499-194e-4303-8bf6-bba41319934c` pending, Manager thinking. No resend or new project/lease bypass. Corrected build not reloaded over uncertain in-flight delivery; live corrected review and worker/next-task acceptance remain open. See `docs/RD2_PHASE0_COMMUNICATION_CHECK_20261010.md`.
+
 ## 2026-10-10 / CANLI BAŞLATMA: RD2 Phase 0 audit tranche
 
 - [x] Existing four GPT roles verified; two exclusive doc-only RD2 audit worktrees created at clean baseline `85f8be5fd64f9f0faa0f8f5da27d91532bdaab30`. Canonical feature backlog remains gated; see `docs/RD2_PHASE0_LAUNCH_20261010.md`.
