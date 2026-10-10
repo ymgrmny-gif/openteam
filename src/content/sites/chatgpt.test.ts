@@ -1,7 +1,31 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createChatGptAdapter } from './chatgpt'
+
+const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand')
+
+beforeEach(() => {
+  // JSDOM has no browser editing engine; this stub models a native contenteditable
+  // transaction, including the browser-produced input event.
+  Object.defineProperty(document, 'execCommand', {
+    configurable: true,
+    value: vi.fn((command: string, _ui: boolean, content: string) => {
+      if (command !== 'insertText') return false
+      const editor = document.activeElement as HTMLElement | null
+      if (!editor || editor.getAttribute('contenteditable') !== 'true') return false
+      const block = document.createElement('p')
+      block.textContent = content
+      editor.replaceChildren(block)
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: content }))
+      return true
+    }),
+  })
+})
+afterEach(() => {
+  if (originalExecCommand) Object.defineProperty(document, 'execCommand', originalExecCommand)
+  else Reflect.deleteProperty(document, 'execCommand')
+})
 
 describe('ChatGPT site adapter', () => {
   it('extracts ChatGPT conversation ids and normalized safe urls', () => {

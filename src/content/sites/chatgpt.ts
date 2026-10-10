@@ -2,7 +2,7 @@ import type { ReplyImageSource } from '../../group/types'
 import type { ChatSiteAdapter, ConversationSnapshot, SiteStatusInfo } from './types'
 import { keepDeepestResponseContainers } from '../responseContainers'
 import { readResponseTextFromCopyAction } from './clipboardCopy'
-import { readEditorText, setContentEditableText } from './contentEditable'
+import { readEditorText } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
 import { isClickableButton } from './waitForElement'
@@ -174,7 +174,13 @@ function writeComposerText(editor: ComposerEditor, content: string): void {
     editor.dispatchEvent(new Event('change', { bubbles: true }))
     return
   }
-  setContentEditableText(editor, content)
+  // Let the browser perform an actual editing transaction. Direct DOM writes
+  // and synthetic input events can leave React/ProseMirror send state disabled.
+  editor.focus()
+  if (typeof editor.ownerDocument.execCommand !== 'function' ||
+      !editor.ownerDocument.execCommand('insertText', false, content)) {
+    throw new Error('ChatGPT native composer insertion unavailable; prompt not sent')
+  }
 }
 
 async function waitForComposerSendButton(editor: ComposerEditor, timeoutMs: number): Promise<HTMLButtonElement> {
