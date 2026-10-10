@@ -4,8 +4,9 @@ import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { DEFAULT_PORT, createControlDaemon } from './openteam-daemon.mjs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { DEFAULT_PORT, createControlDaemon, isDaemonMainModule } from './openteam-daemon.mjs'
 
 describe('openteam local daemon', () => {
   const daemons = []
@@ -19,6 +20,15 @@ describe('openteam local daemon', () => {
     daemons.length = 0
     servers.length = 0
     tempDirs.length = 0
+  })
+
+  it('recognizes a CLI-launched main daemon using filesystem paths on Windows and POSIX', () => {
+    const currentPath = fileURLToPath(import.meta.url)
+    const currentUrl = pathToFileURL(currentPath).href
+    expect(isDaemonMainModule(currentUrl, currentPath)).toBe(true)
+    expect(isDaemonMainModule(currentUrl, resolve(currentPath))).toBe(true)
+    expect(isDaemonMainModule(currentUrl, undefined)).toBe(false)
+    expect(isDaemonMainModule(currentUrl, process.execPath)).toBe(false)
   })
 
   it('uses the shared OpenTeam control default port', () => {

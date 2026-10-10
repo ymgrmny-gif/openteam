@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createServer } from 'node:http'
 
 export const DEFAULT_PORT = 19305
@@ -662,7 +663,18 @@ function sendFrame(socket, data, opcode = 1) {
   socket.write(Buffer.concat([header, payload]))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// On Windows, import.meta.url is file:///C:/... while argv[1] is C:\\...
+// Compare normalized filesystem paths instead of constructing an invalid file URL.
+export function isDaemonMainModule(metaUrl, argvPath) {
+  if (!argvPath) return false
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(resolve(argvPath))
+  } catch {
+    return fileURLToPath(metaUrl) === resolve(argvPath)
+  }
+}
+
+if (isDaemonMainModule(import.meta.url, process.argv[1])) {
   const portArg = process.argv.find(arg => arg.startsWith('--port='))
   const port = portArg ? Number(portArg.slice('--port='.length)) : DEFAULT_PORT
   createControlDaemon({ port })
