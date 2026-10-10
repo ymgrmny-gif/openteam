@@ -31,3 +31,15 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [ ] Yeni build'in kurulu Chrome eklentisine kontrollü devri ve gerçek sohbet limiti E2E testi ayrı aşamada, diğer çalışan sohbetlere dokunmadan.
 - [x] OpenTeam Phase 0 için 4 çekirdek rol + gerektiğinde Başmimar; CLI'ye uygun JSON dosyaları `docs/RD2_OPENTEAM_CORE_ROLES.json` ve `docs/RD2_OPENTEAM_OPTIONAL_ARCHITECT.json` içinde hazırlandı. (Henüz eklentide kayıtlı değiller.)
 - [ ] Normal Chrome OpenTeam v1.0.3 kurulu, fakat `agentControlEnabled=false`; GUI'de Ayarlar > Yerel ajan kontrolü etkinleştirme gerekli. Sınırlı CUA denemesi güvenli biçimde FAIL oldu, eylem yapılmadı.
+
+## 2026-10-10 / OpenTeam canlı geçiş ve ilk RD2 denetimi
+
+- [x] Kullanıcının normal Chrome profilindeki OpenTeam ayarı **Yerel ajan erişimi: Açık** yapıldı, görsel/UIA readback PASS; `openteamcli doctor` sonucu `ok=true`, `extension.connected=true`, daemon `127.0.0.1:19305`.
+- [x] `chat-c7580eff-fa2e-4f09-a247-3642cfe9753d` odası oluşturuldu: Manager, EngineerA, EngineerB, IndependentReviewer, Başmimar rolü eklendi; beşi de başlangıçta `ready` idi.
+- [x] Manager gerçek source erişimi iki bilinmeyen `src/windows-session-observer/index.js` satırıyla test edildi; satırlar doğrudan dosyaya karşı doğrulandı.
+- [x] RD2-AUDIT-001 salt-okunur kaynak denetimi başlatıldı. EngineerB B01–B05 raporu odada `received`: native Visual Sensor/Live Viewer/Screen Control/Browser adapter eksik, gerçek latency/FPS NOT_VERIFIED. En az dört kaynağın başlığını doğrudan readback ile doğruladık.
+- [ ] EngineerA gerçek ChatGPT kaynak sohbetinde son raporu üretti; **OpenTeam ikinci mesaj için yanlış `send was not acknowledged` hata durumu yazdı. Yeniden GÖNDERME — önce mevcut gerçek yanıtı senkronize et!** Kaynak sohbet /c/6aca1ba0-2850-83eb-ad29-282fb3d7c105.
+- [ ] Manager cevap yakalama error `response_not_found`, EngineerB ikinci mesaj sonucu hata gösteriyor; önce kaynak sohbetleri karşılaştır, otomatik retry yok. `src/teamPage/messagesView.ts:227-233` error durumunda `retryRoleReply` kullanıyor: bu yanıtın yeni gönderimle tekrar işlenme riskidir. Salt readback/resync tercih edilmeli.
+- [ ] IndependentReviewer için salt-okunur karşı inceleme görevi OpenTeam'de iletildi; sonucu olmadan Phase 0 ACCEPTED denmeyecek.
+- [ ] Daemon ACP listesi hâlâ `agents=[]`: browser role ChatGPT araç erişimi ile ayrı native/local ACP kodlama ajanı bağlantısı farklıdır; gerçek kodlama için ayrıca sağlam yetki ve araç testi gerekli.
+- [ ] İlk Phase 0 denetiminin gerçek tamamlanma koşulu: A+B+Başmimar raporları ve IndependentReviewer kod/satır kanıtı, P0–P3 onayı, kod değişikliği olmadan TODO/GLOBALMEMORY eşleşmesi.
