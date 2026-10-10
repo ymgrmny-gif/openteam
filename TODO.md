@@ -7,6 +7,7 @@
 - [x] Actual prompt defect: readiness stage inherited final task acceptance/description and Reviewer demanded an Engineer report/commit before writer dispatch. `orchestrationPrompts.ts` now renders readiness-only scope even for persisted flow snapshots; final delivery review retains full artifact acceptance. Missing future artifact is expected; incomplete Manager assignment must still be rejected.
 - [x] `npm run verify` exit0: **770/770 / 91 files**, TypeScript/build PASS. Four focused regressions cover tr/en/zh persisted readiness gates and preserved final acceptance.
 - [ ] Workspace safely **paused**, 0/2 accepted; EngineerA/B ready and audit worktrees clean/no reports. Original automatic REWORK prompt `msg-c63eb499-194e-4303-8bf6-bba41319934c` pending, Manager thinking. No resend or new project/lease bypass. Corrected build not reloaded over uncertain in-flight delivery; live corrected review and worker/next-task acceptance remain open. See `docs/RD2_PHASE0_COMMUNICATION_CHECK_20261010.md`.
+- [ ] Later readback supersedes pending: same REWORK source received with `msg-db3f1648-7fef-4afa-a8de-7b977a3760b0`, again intent-only. Manager/A/B ready, Reviewer error; paused 0/2. Actual complete assignment/final response capture unresolved; do not claim workers running or replay the source.
 
 ## 2026-10-10 / CANLI BAŞLATMA: RD2 Phase 0 audit tranche
 
