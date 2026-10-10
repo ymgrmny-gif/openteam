@@ -73,3 +73,13 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] `npm run verify` EXIT0: TypeScript, Vitest 714/714 (85 dosya), Vite build PASS.
 - [ ] Son derlemenin Chrome extension reload ve veri/rol readback kapısı.
 - [ ] ACP `agent.list=[]` ve tam RD2 D01-D22/V1 parite native E2E kabulü açık; mevcut rapor REWORK, RD2 source değişmedi.
+
+## 2026-10-10 / Gerçek OpenTeam browser işçi/manager smoke — teslim
+
+- [x] Normal Chrome OpenTeam `Reload` ile son build yüklendi; `doctor.ok=true`, extension.connected=true, oda/5 rol/31+ mesaj korundu.
+- [x] EngineerA POST-RELOAD-A3 `msg-79e99f51-4ef7-4fa4-855b-6db51e905bec`: task.read RECEIVED, gerçek support authorization index.js:1-8 ve `NOT_IMPLEMENTED` kanıtı.
+- [x] EngineerB POST-RELOAD-B3 `msg-78a911c8-35da-40ea-9666-b9c982c2393d`: task.read RECEIVED, screen-control-target/index.js:8 & browser-adapter-contract/index.js:5, `NOT_IMPLEMENTED`.
+- [x] Manager POST-RELOAD-MANAGER `msg-4b53e587-0e6a-450e-845a-a543842c93d6`: task.read RECEIVED, sözleşmeleri koru/P0 native aktarım/Reviewer kabul kapısı sonucu, NO-GO kodlama.
+- [x] Bağımsız Reviewer `RD2-AUDIT-002V` 3941 karakterlik FINAL REWORK cevabı kaynak readback/resync ile prompt resend olmadan kurtarıldı; üst denetim henüz tam ACCEPTED değil.
+- [x] Geçiş raporu: `docs/RD2_OPENTEAM_CUTOVER_ACCEPTANCE_20261010.md`.
+- [ ] Web browser rollerinin okuma+sohbet smoke testi ACCEPTED_SCOPED; ACP `agent.list=[]` ve tam native RD2 Phase0 audit/üretim kodlama yetkisi HENÜZ kabul edilmedi. Yeni feature koduna geçme.
