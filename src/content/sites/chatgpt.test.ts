@@ -59,7 +59,10 @@ describe('ChatGPT site adapter', () => {
     `
     const voiceButton = document.querySelector<HTMLButtonElement>('button')!
     const clickListener = vi.fn()
-    voiceButton.addEventListener('click', clickListener)
+    voiceButton.addEventListener('click', () => {
+      clickListener()
+      document.querySelector<HTMLElement>('#prompt-textarea')?.replaceChildren()
+    })
     window.setTimeout(() => {
       voiceButton.disabled = false
       voiceButton.setAttribute('aria-label', '发送提示')
@@ -68,6 +71,78 @@ describe('ChatGPT site adapter', () => {
     await createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('hello', true)
 
     expect(clickListener).toHaveBeenCalledTimes(1)
+  })
+
+
+  it('accepts the newer composer data-testid without the old unified-composer wrapper', async () => {
+    document.body.innerHTML = `
+      <div data-testid="composer-input" contenteditable="true" role="textbox"></div>
+    `
+    await createChatGptAdapter({ inputTimeoutMs: 30 }).fillAndSend('modern editor', false)
+    expect(document.querySelector('[data-testid="composer-input"]')?.textContent).toBe('modern editor')
+  })
+
+  it('accepts an alternate ProseMirror form without an editor id and awaits confirmation', async () => {
+    document.body.innerHTML = `
+      <form data-type="composer-v2">
+        <div class="ProseMirror" contenteditable="true" role="textbox"></div>
+        <button type="button" data-testid="send-button">Send</button>
+      </form>
+    `
+    const editor = document.querySelector<HTMLElement>('.ProseMirror')!
+    const send = document.querySelector<HTMLButtonElement>('button')!
+    const onClick = vi.fn(() => editor.replaceChildren())
+    send.addEventListener('click', onClick)
+    await createChatGptAdapter({ inputTimeoutMs: 300 }).fillAndSend('hello', true)
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('supports a native textarea composer without injecting HTML', async () => {
+    document.body.innerHTML = '<textarea data-testid="composer-input"></textarea>'
+    await createChatGptAdapter({ inputTimeoutMs: 30 }).fillAndSend('<plain text>', false)
+    expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('<plain text>')
+  })
+
+  it('preserves an existing ChatGPT user draft and never clicks send', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true">unfinished user draft</div>
+        <button data-testid="send-button">Send</button></form>
+    `
+    const click = vi.fn()
+    document.querySelector('button')?.addEventListener('click', click)
+    await expect(createChatGptAdapter({ inputTimeoutMs: 30 }).fillAndSend('new message'))
+      .rejects.toThrow('existing draft')
+    expect(document.querySelector('#prompt-textarea')?.textContent).toBe('unfinished user draft')
+    expect(click).not.toHaveBeenCalled()
+  })
+
+  it('fails closed with two different composer editors instead of picking one', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div></form>
+      <form><div data-testid="composer-input" contenteditable="true"></div></form>
+    `
+    await expect(createChatGptAdapter({ inputTimeoutMs: 30 }).fillAndSend('unsafe'))
+      .rejects.toThrow('multiple composer candidates')
+    expect(document.querySelector('#prompt-textarea')?.textContent).toBe('')
+  })
+
+  it('rejects a missing editor without modifying other content-editable elements', async () => {
+    document.body.innerHTML = '<div contenteditable="true" role="textbox">Unrelated editor</div>'
+    await expect(createChatGptAdapter({ inputTimeoutMs: 20 }).fillAndSend('unsafe'))
+      .rejects.toThrow('composer not found')
+    expect(document.querySelector('[contenteditable]')?.textContent).toBe('Unrelated editor')
+  })
+
+  it('does not claim delivery when send was clicked but neither draft nor conversation changes', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+      <button type="button" data-testid="send-button">Send</button></form>
+    `
+    const click = vi.fn()
+    document.querySelector('button')?.addEventListener('click', click)
+    await expect(createChatGptAdapter({ inputTimeoutMs: 250 }).fillAndSend('test'))
+      .rejects.toThrow('not acknowledged')
+    expect(click).toHaveBeenCalledTimes(1)
   })
 
   it('reads assistant markdown replies without action button text', () => {

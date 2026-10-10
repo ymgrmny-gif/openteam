@@ -5,7 +5,7 @@ import { readResponseTextFromCopyAction } from './clipboardCopy'
 import { readEditorText, setContentEditableText } from './contentEditable'
 import { extractMarkdownFromDom } from './domMarkdown'
 import { buttonLabelMatches, describeElement, extractCleanTextFromDom, findClosestMatchingAncestor } from './domText'
-import { isClickableButton, waitForClickableButton, waitForElement } from './waitForElement'
+import { isClickableButton } from './waitForElement'
 
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com'])
 const DEFAULT_INPUT_TIMEOUT_MS = 9000
@@ -13,7 +13,8 @@ const DEFAULT_CLIPBOARD_TIMEOUT_MS = 900
 const DEFAULT_CLIPBOARD_POLL_MS = 40
 
 const CHATGPT_SELECTORS = {
-  editor: 'form[data-type="unified-composer"] #prompt-textarea[contenteditable="true"], #prompt-textarea.ProseMirror[contenteditable="true"]',
+  // ChatGPT changes its form wrappers and editor IDs. Only consider identifiable composer fields.
+  editor: '#prompt-textarea[contenteditable="true"], [data-testid="composer-input"][contenteditable="true"], form .ProseMirror[contenteditable="true"], form [role="textbox"][contenteditable="true"], textarea#prompt-textarea, textarea[data-testid="composer-input"]',
   sendButton:
     'button[data-testid="send-button"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"]',
   response: '[data-message-author-role="assistant"]',
@@ -78,17 +79,28 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
   }
 
   async function fillAndSend(content: string, autoSend = true): Promise<void> {
-    const editor = await waitForElement(CHATGPT_SELECTORS.editor, inputTimeoutMs)
+    if (!content.trim()) throw new Error('ChatGPT: empty prompt rejected')
+    if (isChatGptGenerating()) throw new Error('ChatGPT is already generating; prompt not sent')
 
-    setContentEditableText(editor, content)
-    if (readEditorText(editor) !== content.trim()) {
+    const editor = await waitForUniqueComposer(inputTimeoutMs)
+    // Existing user drafts belong to the user, including drafts in iframe sessions.
+    if (readComposerText(editor)) throw new Error('ChatGPT composer contains an existing draft; prompt not sent')
+
+    writeComposerText(editor, content)
+    if (readComposerText(editor) !== content.trim()) {
       throw new Error('ChatGPT editor did not accept the prompt text')
     }
 
     if (!autoSend) return
 
-    const sendButton = await waitForClickableButton(CHATGPT_SELECTORS.sendButton, inputTimeoutMs, 'ChatGPT 发送按钮暂不可用，请稍后重试')
+    const previousUserTurns = document.querySelectorAll(CHATGPT_SELECTORS.userTurn).length
+    const sendButton = await waitForComposerSendButton(editor, inputTimeoutMs)
+    if (readComposerText(editor) !== content.trim() || isChatGptGenerating()) {
+      throw new Error('ChatGPT composer changed before send; prompt not sent')
+    }
     sendButton.click()
+    // A dispatched click is not proof of delivery. Do not silently retry an uncertain send.
+    await waitForSendAcknowledgement(editor, previousUserTurns, inputTimeoutMs)
   }
 
   return {
@@ -108,6 +120,111 @@ export function createChatGptAdapter(options: ChatGptAdapterOptions = {}): ChatS
     fillAndSend,
     collectPromptDiagnostics,
   }
+}
+
+
+type ComposerEditor = HTMLElement
+
+function findComposer(): ComposerEditor | null {
+  const candidates = [...document.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.editor)]
+    .filter(element => {
+      if (element.closest('[hidden], [aria-hidden="true"]')) return false
+      if (element.getAttribute('contenteditable') !== 'true' && !(element instanceof HTMLTextAreaElement)) return false
+      if (element instanceof HTMLTextAreaElement && (element.disabled || element.readOnly)) return false
+      const style = window.getComputedStyle(element)
+      return style.display !== 'none' && style.visibility !== 'hidden'
+    })
+  if (candidates.length > 1) throw new Error('ChatGPT has multiple composer candidates; prompt not sent')
+  return candidates[0] ?? null
+}
+
+async function waitForUniqueComposer(timeoutMs: number): Promise<ComposerEditor> {
+  const immediate = findComposer()
+  if (immediate) return immediate
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const interval = window.setInterval(() => {
+      try {
+        const editor = findComposer()
+        if (editor) {
+          window.clearInterval(interval)
+          resolve(editor)
+        } else if (Date.now() - startedAt >= timeoutMs) {
+          window.clearInterval(interval)
+          reject(new Error('ChatGPT composer not found (missing or inaccessible iframe); prompt not sent'))
+        }
+      } catch (error) {
+        window.clearInterval(interval)
+        reject(error)
+      }
+    }, 200)
+  })
+}
+
+function readComposerText(editor: ComposerEditor): string {
+  return editor instanceof HTMLTextAreaElement ? editor.value.trim() : readEditorText(editor)
+}
+
+function writeComposerText(editor: ComposerEditor, content: string): void {
+  if (editor instanceof HTMLTextAreaElement) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    if (!setter) throw new Error('ChatGPT textarea has no safe native setter')
+    setter.call(editor, content)
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: content }))
+    editor.dispatchEvent(new Event('change', { bubbles: true }))
+    return
+  }
+  setContentEditableText(editor, content)
+}
+
+async function waitForComposerSendButton(editor: ComposerEditor, timeoutMs: number): Promise<HTMLButtonElement> {
+  const scope = editor.closest('form') ?? editor.closest('[data-testid="composer"]') ?? document
+  const findButton = (): HTMLButtonElement | null => {
+    const candidates = [...scope.querySelectorAll<HTMLButtonElement>(CHATGPT_SELECTORS.sendButton)]
+      .filter(button => isClickableButton(button) && !button.closest('[hidden], [aria-hidden="true"]'))
+    if (candidates.length > 1) throw new Error('ChatGPT has ambiguous send buttons; prompt not sent')
+    return candidates[0] ?? null
+  }
+  const immediate = findButton()
+  if (immediate) return immediate
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const interval = window.setInterval(() => {
+      try {
+        const button = findButton()
+        if (button) {
+          window.clearInterval(interval)
+          resolve(button)
+        } else if (Date.now() - startedAt >= timeoutMs) {
+          window.clearInterval(interval)
+          reject(new Error('ChatGPT send button unavailable; prompt kept as draft'))
+        }
+      } catch (error) {
+        window.clearInterval(interval)
+        reject(error)
+      }
+    }, 200)
+  })
+}
+
+async function waitForSendAcknowledgement(editor: ComposerEditor, previousUserTurns: number, timeoutMs: number): Promise<void> {
+  const acknowledged = () => (
+    document.querySelectorAll(CHATGPT_SELECTORS.userTurn).length > previousUserTurns ||
+    readComposerText(editor) === ''
+  )
+  if (acknowledged()) return
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const interval = window.setInterval(() => {
+      if (acknowledged()) {
+        window.clearInterval(interval)
+        resolve()
+      } else if (Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(interval)
+        reject(new Error('ChatGPT send was not acknowledged; do not retry automatically'))
+      }
+    }, 200)
+  })
 }
 
 function checkChatGptStatus(): SiteStatusInfo {
