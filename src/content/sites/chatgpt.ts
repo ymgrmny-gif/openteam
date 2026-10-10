@@ -514,7 +514,7 @@ async function stopChatGptGenerating(): Promise<boolean> {
 }
 
 function findChatGptStopButton(): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止/) && isClickableButton(button) && isVisibleInteractiveElement(button))
+  return [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => buttonLabelMatches(button, /stop|stopping|停止|中止|durdur/i) && isClickableButton(button) && isVisibleInteractiveElement(button))
 }
 
 function findChatGptActivityIndicator(): Element | undefined {

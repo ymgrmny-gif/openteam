@@ -732,6 +732,26 @@ describe('ChatGPT site adapter', () => {
 
     expect(createChatGptAdapter().isGenerating()).toBe(true)
   })
+  it('acknowledges a Turkish Durdur generation control after a successful send without replaying the prompt', async () => {
+    document.body.innerHTML = `
+      <form><div id="prompt-textarea" contenteditable="true"></div>
+        <button type="button" data-testid="send-button">Gönder</button></form>
+    `
+    const editor = document.querySelector<HTMLElement>('#prompt-textarea')!
+    const send = document.querySelector<HTMLButtonElement>('button')!
+    const click = vi.fn(() => {
+      editor.replaceChildren()
+      send.remove()
+      document.body.insertAdjacentHTML('beforeend', '<button type="button" aria-label="Durdur">Durdur</button>')
+      // JSDOM has no layout; mark the stop control as visible like a real ChatGPT page.
+      Object.defineProperty(document.querySelector('[aria-label="Durdur"]')!, 'offsetParent', { configurable: true, value: document.body })
+    })
+    send.addEventListener('click', click)
+    await createChatGptAdapter({ inputTimeoutMs: 100, sendAckTimeoutMs: 160 }).fillAndSend('Yeni denetim')
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(createChatGptAdapter().isGenerating()).toBe(true)
+  })
+
   it('recognizes a visible conversation length warning separately from account quota', () => {
     document.body.innerHTML = '<div role="alert">Bu konuşma için maksimum süreye ulaştın ama yeni bir sohbet başlatarak konuşmaya devam edebilirsin.</div>'
     const adapter = createChatGptAdapter()
