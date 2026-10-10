@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { resolve, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
@@ -150,7 +150,7 @@ describe('extension security configuration', () => {
     writeFileSync(resolve(root, 'team.css'), '.app{}')
 
     try {
-      expect(collectJavaScriptFiles(root).map(file => file.replace(root, '<root>')).sort()).toEqual([
+      expect(collectJavaScriptFiles(root).map(file => file.replace(root, '<root>').split(sep).join('/')).sort()).toEqual([
         '<root>/assets/chunk.js',
         '<root>/team.js',
       ])

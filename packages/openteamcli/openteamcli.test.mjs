@@ -72,7 +72,16 @@ describe('openteamcli command builder', () => {
     })
   })
 
-  it('runs when invoked through an npm-style bin symlink', () => {
+  it('runs from the executable entry point on the current OS', () => {
+    const script = resolve(__dirname, 'openteamcli.mjs')
+    // Windows normally runs npm bins via a .cmd shim; creating file symlinks
+    // needs a privilege unavailable to standard users.
+    if (process.platform === 'win32') {
+      const result = spawnSync(process.execPath, [script, 'help'], { encoding: 'utf8' })
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('openteamcli doctor')
+      return
+    }
     const tempDir = mkdtempSync(join(tmpdir(), 'openteamcli-bin-'))
     const binPath = join(tempDir, 'openteamcli')
     symlinkSync(resolve(__dirname, 'openteamcli.mjs'), binPath)

@@ -65,6 +65,15 @@ export default defineConfig(({ mode }) => ({
       },
     },
     {
+      name: 'strip-cli-hashbang-for-test-transform',
+      enforce: 'pre',
+      transform(source, id) {
+        const normalizedId = id.split(String.fromCharCode(92)).join('/')
+        if (!normalizedId.includes('/packages/openteamcli/') || !normalizedId.endsWith('.mjs') || !source.startsWith('#!')) return undefined
+        return source.replace(/^#![^\r\n]*/, '')
+      },
+    },
+    {
       name: 'extension-files',
       apply: 'build',
       async closeBundle() {
