@@ -154,7 +154,7 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     if (deps.orchestrationModalEl.hidden) return
     draft.maxNodeExecutions = clampMaxNodeExecutions(Number(deps.orchestrationMaxRoundsEl.value || DEFAULT_ORCHESTRATION_MAX_NODE_EXECUTIONS))
     deps.orchestrationHintEl.hidden = draft.stages.length > 0
-    deps.orchestrationHintEl.textContent = '把人员拖到画布生成节点，再从节点端口拖线编排执行关系。'
+    deps.orchestrationHintEl.textContent = '拖动人员到画布，或点击人员依次添加已连线的执行节点。'
     renderPeopleList()
     renderStageSettings()
     renderAutoPanel()
@@ -175,6 +175,15 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
       const card = document.createElement('div')
       card.className = 'orchestration-person'
       card.draggable = true
+      card.tabIndex = 0
+      card.setAttribute('role', 'button')
+      card.setAttribute('aria-label', `顺序添加 ${role.name} 节点`)
+      card.addEventListener('click', () => appendSequentialRoleStage(role.id))
+      card.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        appendSequentialRoleStage(role.id)
+      })
       card.addEventListener('dragstart', event => {
         event.dataTransfer?.setData('application/x-openteam-role-id', role.id)
       })
@@ -480,6 +489,15 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
   function selectedRoleIds(stage: OrchestrationStage): string[] {
     if (stage.kind === 'review') return stage.review?.reviewerRoleIds.length ? stage.review.reviewerRoleIds : stage.roleIds
     return stage.roleIds
+  }
+
+  function appendSequentialRoleStage(roleId: string): void {
+    const previous = draft.stages[draft.stages.length - 1]
+    const stage: OrchestrationStage = { id: newId('stage'), kind: 'roles', name: getRoleName(roleId), roleIds: [roleId] }
+    draft.stages.push(stage)
+    if (previous) draft.graphEdges.push({ sourceStageId: previous.id, targetStageId: stage.id })
+    draft.selectedStageId = undefined
+    render()
   }
 
   function addRoleAsStage(roleId: string): void {
@@ -825,7 +843,8 @@ export function createOrchestrationModalView(deps: OrchestrationModalDependencie
     if (running || saving) return
     const chat = deps.getCurrentChat()
     const task = deps.orchestrationTaskEl.value.trim()
-    if (chat && !ensureExternalApiConfigured()) return
+    // Manual flows execute the already connected chat roles; they do not require
+    // an external planning model. Only autoGenerate needs an external API.
     if (!chat || !validateDraft(true)) return
     if (!task) {
       deps.showError('请输入编排任务')

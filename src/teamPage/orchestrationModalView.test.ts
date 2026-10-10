@@ -224,7 +224,32 @@ describe('orchestration modal view', () => {
     expect(harness.refs.orchestrationModalEl.hidden).toBe(false)
   })
 
-  it('prompts users to configure an external API before running an already-open draft', async () => {
+  it('clicks roles to build connected ProductManager to Engineer to ProductManager stages without dragging', async () => {
+    const harness = createHarness()
+    const view = createView(harness)
+    view.registerOrchestrationEvents()
+    harness.refs.openOrchestrationEl.click()
+
+    const cards = harness.refs.orchestrationPeopleListEl.querySelectorAll<HTMLElement>('.orchestration-person')
+    expect(cards).toHaveLength(2)
+    expect(cards[0]?.getAttribute('role')).toBe('button')
+    cards[0]?.click()
+    cards[1]?.click()
+    cards[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    harness.refs.orchestrationTaskEl.value = 'Synthetic sequential handoff only'
+    harness.refs.runOrchestrationEl.click()
+    await flushAsync()
+
+    const payload = harness.runCommand.mock.calls.find(call => call[0] === 'GROUP_ORCHESTRATION_RUN')?.[1] as { flow?: OrchestrationFlow }
+    expect(payload.flow?.stages.map(stage => stage.roleIds)).toEqual([['role-1'], ['role-2'], ['role-1']])
+    const stages = payload.flow?.stages ?? []
+    expect(payload.flow?.graph?.edges).toEqual([
+      expect.objectContaining({ sourceStageId: stages[0]?.id, targetStageId: stages[1]?.id }),
+      expect.objectContaining({ sourceStageId: stages[1]?.id, targetStageId: stages[2]?.id }),
+    ])
+  })
+
+  it('runs a manually prepared ChatGPT-only flow without an external API', async () => {
     const harness = createHarness()
     const view = createView(harness)
     view.registerOrchestrationEvents()
@@ -237,9 +262,9 @@ describe('orchestration modal view', () => {
     harness.refs.runOrchestrationEl.click()
     await flushAsync()
 
-    expect(harness.errors).toContain('编排依赖外部模型 API，请先配置一个外部模型。')
-    expect(harness.openExternalModels).toHaveBeenCalledTimes(1)
-    expect(harness.runCommand).not.toHaveBeenCalledWith('GROUP_ORCHESTRATION_RUN', expect.anything())
+    expect(harness.errors).not.toContain('编排依赖外部模型 API，请先配置一个外部模型。')
+    expect(harness.openExternalModels).not.toHaveBeenCalled()
+    expect(harness.runCommand).toHaveBeenCalledWith('GROUP_ORCHESTRATION_RUN', expect.objectContaining({ chatId: 'chat-1' }))
   })
 
   it('opens built-in orchestration templates from a compact picker button', () => {
