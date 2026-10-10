@@ -258,7 +258,7 @@ export async function recoverOrchestrationRuns(deps: OrchestrationRuntimeDepende
     .map(run => ({ id: run.id, chatId: run.chatId, pending: run.pendingStageIndices ?? [], replies: run.stageRuns.flatMap(sr => Object.values(sr.roleRuns)
       .filter(rr => sr.status === 'running' && rr.status === 'running')
       .flatMap(rr => {
-        const reply = Object.values(store.messagesById).find(msg => msg.chatId === run.chatId && msg.type === 'assistant' && msg.roleId === rr.roleId && msg.sourceMessageId === rr.messageId && msg.status === 'received')
+        const reply = Object.values(store.messagesById).sort((a, b) => b.seq - a.seq).find(msg => msg.chatId === run.chatId && msg.type === 'assistant' && msg.roleId === rr.roleId && msg.sourceMessageId === rr.messageId && msg.status === 'received')
         return reply ? [{ roleId: rr.roleId, promptMessageId: rr.messageId, replyMessage: reply }] : []
       })) })))
   for (const run of snapshot.result) {
@@ -360,7 +360,7 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
           if (stage.projectGate) {
             const managerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Manager'))
             const managerPromptId = managerStage?.roleRuns[flow.project.managerRoleId]?.messageId
-            const managerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === managerPromptId && msg.roleId === flow.project!.managerRoleId && msg.status === 'received')
+            const managerReply = getChatMessages(store, chat).reverse().find(msg => msg.type === 'assistant' && msg.sourceMessageId === managerPromptId && msg.roleId === flow.project!.managerRoleId && msg.status === 'received')
             try {
               if (!managerReply || evidence.taskId !== taskId || evidence.planMessageId !== managerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) throw new Error('Review gate lacks exact correlated independent evidence')
               if (stage.projectGate === 'readiness') validateReadiness(evidence, task)
@@ -379,7 +379,7 @@ export async function maybeAdvanceOrchestrationRun(deps: OrchestrationRuntimeDep
           } else {
             const workerStage = [...run.stageRuns].reverse().find(sr => flow.stages[sr.stageIndex]?.projectTaskId === taskId && flow.stages[sr.stageIndex]?.name.endsWith(': Worker'))
             const workerPromptId = workerStage && Object.values(workerStage.roleRuns)[0]?.messageId
-            const workerReply = getChatMessages(store, chat).find(msg => msg.type === 'assistant' && msg.sourceMessageId === workerPromptId && msg.roleId === flow.project?.tasks.find(task => task.id === taskId)?.ownerRoleId && msg.status === 'received')
+            const workerReply = getChatMessages(store, chat).reverse().find(msg => msg.type === 'assistant' && msg.sourceMessageId === workerPromptId && msg.roleId === flow.project?.tasks.find(task => task.id === taskId)?.ownerRoleId && msg.status === 'received')
             if (!workerReply || evidence.taskId !== taskId || evidence.workerMessageId !== workerReply.id || evidence.verified !== true || !Array.isArray(evidence.evidence) || !evidence.evidence.length || evidence.evidence.some(item => typeof item !== 'string' || !item.trim()) || parsed.decision.failedCriteria.length) {
               failRun(store, chat, run, 'BLOCKED: review PASS lacks correlated independent source/test/Git evidence', timestamp)
               return { next: false as const }

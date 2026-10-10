@@ -56,6 +56,11 @@ export function buildCliRequest(argv) {
   }
 
   if (group === 'task') {
+    if (subcommand === 'resync') return command('task.resync', {
+      chatId: requireOption(options, 'chat'),
+      roleId: requireOption(options, 'role'),
+      messageId: requireOption(options, 'message'),
+    })
     if (subcommand === 'post') return command('task.post', {
       chatId: requireOption(options, 'chat'),
       target: parseTarget(options.target ?? 'all'),
@@ -340,6 +345,7 @@ export function help() {
       'openteamcli chat list|get|create|activate|initialize',
       'openteamcli role batch-add --chat <chatId> --file roles.json',
       'openteamcli task post|wait|read',
+      'openteamcli task resync --chat <id> --role <id> --message <assistant-id> (read existing source reply; no resend)',
       'openteamcli project start --file backlog.json',
       'openteamcli project import --file project.json --todo TODO.md',
       'openteamcli project execute --id <projectId>',

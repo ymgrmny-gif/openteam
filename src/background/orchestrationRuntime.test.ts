@@ -134,6 +134,30 @@ describe('orchestration runtime', () => {
     expect((await runtime.getStore()).orchestrationRunsById[started.run.id].stageRuns[0].status).toBe('completed')
   })
 
+  it('advances a running project exactly once after verified readback repairs its old failed delivery ledger', async () => {
+    const harness = await setupBackground(makeStore(['manager', 'a', 'b', 'reviewer']))
+    for (const [index, roleId] of ['manager', 'a', 'b', 'reviewer'].entries()) {
+      await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId }, { tab: { id: 101 + index } as chrome.tabs.Tab, frameId: index + 1, url: 'https://gemini.google.com/app/test' })
+    }
+    await harness.invoke({ type: 'GROUP_PROJECT_START', project: projectInput() })
+    const prompt = lastPromptMessageId(harness.tabsSendMessage)
+    const { mutateStore } = await import('./storeAccess')
+    await mutateStore(store => {
+      const chat = store.chatsById['chat-1']
+      store.rolesById.manager.status = 'ready'
+      delete store.rolesById.manager.lastPromptMessageId
+      store.messagesById[prompt].deliveryStatus!.manager = 'error'
+      store.messagesById[prompt].status = 'error'
+      store.messagesById.recovered = { id: 'recovered', chatId: chat.id, seq: chat.nextMessageSeq++, type: 'assistant', roleId: 'manager', roleName: 'Manager', sourceMessageId: prompt, content: 'timeout', status: 'error', createdAt: store.messagesById[prompt].createdAt + 1 }
+      chat.messageIds.push('recovered')
+    })
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'manager', messageId: 'recovered', content: 'Concrete source assignment' })
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
+    expect(promptCalls(harness.tabsSendMessage)[1][1].roleId).toBe('a')
+    await harness.invoke({ type: 'TEAM_ROLE_REPLY_RESYNC', chatId: 'chat-1', roleId: 'manager', messageId: 'recovered', content: 'Concrete source assignment' })
+    expect(promptCalls(harness.tabsSendMessage)).toHaveLength(2)
+  })
+
   it('automatically runs finite Manager -> worker -> Reviewer -> next task, REWORK and completion without duplicate dispatch', async () => {
     const harness = await setupBackground(makeStore(['manager', 'a', 'b', 'reviewer']))
     for (const [index, roleId] of ['manager', 'a', 'b', 'reviewer'].entries()) {

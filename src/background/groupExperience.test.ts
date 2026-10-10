@@ -1097,6 +1097,23 @@ describe('background group chat experience handlers', () => {
     expect(harness.tabsSendMessage.mock.calls[0][0]).toBe(901)
   })
 
+  it.each(['ready', 'thinking'] as const)('ignores a late timeout after delivery without damaging a %s role or sending again', async status => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['old'], nextMessageSeq: 2 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', 'Manager', { status, lastPromptMessageId: status === 'thinking' ? 'new' : undefined })
+    store.messagesById.old = { id: 'old', chatId: 'chat-1', seq: 1, type: 'user', content: 'Assignment', targetRoleIds: ['role-1'], createdAt: 1, status: 'received', deliveryStatus: { 'role-1': 'received' } }
+    const harness = await setupBackground(store)
+    const result = await harness.invoke({ type: 'TEAM_ROLE_ERROR', chatId: 'chat-1', roleId: 'role-1', messageId: 'old', reason: 'Reply timeout' }) as { ignored: boolean; store: OpenTeamStore }
+    expect(result.ignored).toBe(true)
+    expect(result.store.messagesById.old.deliveryStatus?.['role-1']).toBe('received')
+    expect(result.store.rolesById['role-1'].status).toBe(status)
+    expect(result.store.rolesById['role-1'].lastPromptMessageId).toBe(status === 'thinking' ? 'new' : undefined)
+    expect(result.store.chatsById['chat-1'].messageIds).toEqual(['old'])
+    expect(harness.tabsSendMessage.mock.calls.filter(call => call[1]?.type === 'TEAM_SEND_PROMPT')).toHaveLength(0)
+  })
+
   it('marks timed-out personnel errors and delivery status through TEAM_ROLE_ERROR', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

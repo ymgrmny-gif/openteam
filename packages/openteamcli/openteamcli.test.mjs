@@ -9,6 +9,10 @@ import { buildCliRequest, help } from './openteamcli.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 describe('openteamcli command builder', () => {
+  it('resyncs an existing source reply without posting a new task', () => {
+    expect(buildCliRequest(['task', 'resync', '--chat', 'c', '--role', 'r', '--message', 'a'])).toMatchObject({ command: { action: 'task.resync', payload: { chatId: 'c', roleId: 'r', messageId: 'a' } } })
+    expect(() => buildCliRequest(['task', 'resync', '--chat', 'c', '--message', 'a'])).toThrow()
+  })
   it('builds hierarchy import, execute and workspace pause/resume requests', () => {
     expect(buildCliRequest(['project', 'import', '--file', 'project.json', '--todo', 'TODO.md'])).toMatchObject({ kind: 'file-command', action: 'project.import', file: 'project.json', todoFile: 'TODO.md' })
     expect(buildCliRequest(['project', 'execute', '--id', 'p'])).toMatchObject({ command: { action: 'project.execute', payload: { id: 'p' } } })
@@ -77,6 +81,7 @@ describe('openteamcli command builder', () => {
         'openteamcli chat list|get|create|activate|initialize',
         'openteamcli role batch-add --chat <chatId> --file roles.json',
         'openteamcli task post|wait|read',
+      'openteamcli task resync --chat <id> --role <id> --message <assistant-id> (read existing source reply; no resend)',
         'openteamcli project start --file backlog.json',
         'openteamcli project import --file project.json --todo TODO.md',
         'openteamcli project execute --id <projectId>',

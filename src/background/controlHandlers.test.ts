@@ -5,6 +5,16 @@ import { createControlActionExecutor, readTaskResult } from './controlHandlers'
 import type { RuntimeMessage } from './runtimeClient'
 
 describe('background control handlers', () => {
+  it('routes source reply resync through the existing guarded runtime command', async () => {
+    const store = createDefaultStore()
+    store.settings.agentControlEnabled = true
+    const route = vi.fn().mockResolvedValue({ ok: true })
+    const execute = createControlActionExecutor({ loadStore: async () => store, routeRuntimeMessage: route, runtimeFrames: { list: () => [] }, openTeamPage: vi.fn(), waitFor: async () => undefined, now: () => 1 })
+    expect(await execute({ id: 'sync', action: 'task.resync', payload: { chatId: 'c', roleId: 'r', messageId: 'a' } })).toMatchObject({ ok: true })
+    expect(route).toHaveBeenCalledWith({ type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: 'c', roleId: 'r', messageId: 'a' })
+    expect(await execute({ id: 'bad', action: 'task.resync', payload: { chatId: 'c', messageId: 'a' } })).toMatchObject({ ok: false })
+    expect(route).toHaveBeenCalledTimes(1)
+  })
   it('routes project control through the durable runtime and exposes blocked reasons', async () => {
     const store = createDefaultStore()
     store.settings.agentControlEnabled = true

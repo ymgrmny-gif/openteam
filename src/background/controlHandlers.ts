@@ -102,6 +102,8 @@ async function executeEnabledCommand(command: ControlHttpCommand, initialStore: 
     }
     case 'task.read':
       return readTaskResult(initialStore, requirePayloadString(command.payload, 'chatId'), requirePayloadString(command.payload, 'messageId'))
+    case 'task.resync':
+      return routeOk(deps, { type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: requirePayloadString(command.payload, 'chatId'), roleId: requirePayloadString(command.payload, 'roleId'), messageId: requirePayloadString(command.payload, 'messageId') })
     case 'task.wait':
       return waitForTask(command.payload, deps)
     case 'run.createAndPost':

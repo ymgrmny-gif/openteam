@@ -782,6 +782,12 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
 
     deps.log.info('role-reply-resync:stored', { chatId: result.message.chatId, roleId: result.message.roleId, replyMessageId: result.message.id })
     await deps.broadcastStoreUpdated(store)
+    if (result.message.type === 'assistant' && result.message.sourceMessageId) {
+      await maybeAdvanceOrchestrationRun(deps, {
+        chatId: result.message.chatId, roleId: result.message.roleId!,
+        promptMessageId: result.message.sourceMessageId, replyMessage: result.message,
+      })
+    }
     return { ok: true, message: result.message, store }
   }
 
@@ -791,6 +797,15 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     const promptMessageId = readOptionalString(message.messageId)
     const replyAttemptId = readOptionalString(message.replyAttemptId)
     deps.log.warn('role-error:received', { ...identity, promptMessageId, replyAttemptId, reason, senderUrl: sender.url, tabId: messageTabId(message, sender), frameId: senderFrameId(sender) })
+
+    if (promptMessageId) {
+      const check = await mutateStore(store => {
+        const chat = requireChat(store, identity.chatId)
+        const role = requireRole(store, chat.id, identity.roleId)
+        return staleReplyReason(store, chat, role, promptMessageId, replyAttemptId)
+      })
+      if (check.result) return { ok: true, ignored: true, reason: check.result, store: check.store }
+    }
 
     const retry = promptMessageId
       ? await prepareRoleErrorRetry(deps, roleErrorRetryCounts, identity.chatId, identity.roleId, promptMessageId, replyAttemptId, reason)
@@ -815,9 +830,13 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
     }
 
     const timestamp = deps.now()
-    const { store } = await mutateStore(store => {
+    const { store, result: ignored } = await mutateStore(store => {
       const chat = requireChat(store, identity.chatId)
       const role = requireRole(store, chat.id, identity.roleId)
+      if (promptMessageId) {
+        const staleReason = staleReplyReason(store, chat, role, promptMessageId, replyAttemptId)
+        if (staleReason) return staleReason
+      }
       role.status = 'error'
       role.updatedAt = timestamp
       if (reason.includes('CONVERSATION_EXHAUSTED') || reason.includes('ACCOUNT_QUOTA')) {
@@ -844,6 +863,8 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       chat.status = deps.getChatStatusFromRoles(store, chat)
       chat.updatedAt = role.updatedAt
     })
+
+    if (ignored) return { ok: true, ignored: true, reason: ignored, store }
 
     await deps.broadcastStoreUpdated(store)
     await deps.sendError(reason)

@@ -30,6 +30,7 @@ export const OPENTEAM_CONTROL_CAPABILITIES = [
   'project.resume',
   'task.wait',
   'task.read',
+  'task.resync',
   'run.createAndPost',
   'agent.list',
   'agent.run',

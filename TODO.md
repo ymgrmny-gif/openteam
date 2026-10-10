@@ -1,5 +1,14 @@
 # OpenTeam Local Evaluation — TODO
 
+## 2026-10-10 / LIVE ACTIVATION — supersedes the paused checkpoint below
+
+- Activated verified extension build through exact Chrome extension Reload; official initialize returned all four existing roles ready. Same workspace rd2-phase0-audit-20261010 and run run-46364fa0-8d07-4f8e-bf61-adfed370347d retained; no prompt replay/new workspace.
+- Root cause: messageHandlers.ts handleRoleError accepted stale timeout after completed ROLE_REPLY and overwrote received prompt delivery to error. Running recovery then refused to advance. Guard before retry and inside mutation now ignores old prompt/attempt and completed deliveries. Existing source resync now invokes correlated orchestration advancement; task resync CLI exposes the existing guarded readback route without new prompt.
+- Actual source readback: original Manager REWORK c63eb499 recovered from ChatGPT through latest assistant msg-2960ad03-6b29-409a-b7e4-685fed60ebf0. Full source response includes clean exact audit branch/base check and REWORK_ASSIGNMENT_READY. Recovery and acceptance evidence select latest verified source instead of first partial preface.
+- npm run verify exit 0: 775/775 tests, 91 files, typecheck/build. Final run bounded Vitest workers to two after resource-related 5s test timeout; sandbox-localhost EACCES was separately resolved with approved test execution. These are synthetic regressions, not native product acceptance.
+- Same-run project resume automatically dispatched Reviewer readiness prompt msg-7800feeb-c514-4a38-80d6-b4d6466e3149. Actual delivery sent; Reviewer thinking. Prompt contains PRE-DELIVERY READINESS ONLY and recovered Manager source ID. System is active, not paused. Engineer delivery, independent final acceptance, auto-next audit and delivered-worker reload-resume remain OPEN; 0/2 accepted at activation. Product acceptance 15% unchanged.
+- Historical pending msg-07cb3ac3-bd2f-4fb7-8eb8-52603a09f87b untouched. RD2 runtime/OS/credentials/V1/production untouched; only audit writers remain authorized. Inspect same project/read and correlated task replies; never resend uncertain sources.
+
 ## 2026-10-10 / CANLI İLETİŞİM KONTROLÜ VE PUSH
 
 - [x] User authorized push. OpenTeam fork `https://github.com/ymgrmny-gif/openteam` created; feature branch pushed/remote SHA verified at `7c18a62`. Third-party origin afumu/openteam untouched. RD2 docs pushed to owned origin/main `ffd50f0` and remote SHA verified.
