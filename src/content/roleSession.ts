@@ -42,6 +42,12 @@ export function createRoleSession(options: {
     getActiveReplyAttemptId: () => activeReplyAttemptId,
     getAssignedChatId,
     assignRole(role): void {
+      if (assignedRole?.chatId === role.chatId && assignedRole.roleId === role.roleId) {
+        // The host retries iframe assignments until it receives READY. A repeated
+        // assignment must not erase the in-flight message or its reply attempt.
+        assignedRole = role
+        return
+      }
       assignedRole = role
       activeMessageId = undefined
       activeReplyAttemptId = undefined

@@ -19,7 +19,8 @@ const CHATGPT_SELECTORS = {
     '#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-send-button"], button[aria-label*="Gönder"], button[aria-label*="发送"], button[aria-label*="Send"], button[aria-label*="提交"], button[aria-label*="Submit"], button[title="Gönder"]',
   response: '[data-message-author-role="assistant"]',
   // Current ChatGPT also renders assistant prose without the legacy author attribute.
-  modernResponse: '[data-testid^="conversation-turn-"] .markdown, main .markdown',
+  // Live ChatGPT 2026: answer prose lives in a styled ResponseRoot, not legacy turns.
+  modernResponse: '[class*="ResponseRoot"], [data-testid^="conversation-turn-"] .markdown, main .markdown',
   imageResponse: '[data-conversation-screenshot-content]',
   generatedImage:
     'img[src*="/backend-api/estuary/content"], [data-testid*="image"] img[src], [class*="imagegen-image"] img[src]',

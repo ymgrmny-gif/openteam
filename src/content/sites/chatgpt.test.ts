@@ -359,6 +359,33 @@ describe('ChatGPT site adapter', () => {
     expect(createChatGptAdapter().getAllAssistantReplies()).toEqual([])
   })
 
+
+  it('recognizes real 2026 ChatGPT ResponseRoot output without legacy author or turn attributes', () => {
+    document.body.innerHTML = `
+      <main><div class="DiiResponseRoot-HfQrE Reveal-kzIlwM">
+        <div class="DiiRenderer-tB76J">
+          <p class="TextBase-hXhSqg Text-LiMPO_">
+            <span data-d-text-flow="word" data-d-stream-word="">PONG4</span>
+          </p>
+        </div>
+      </div></main>
+    `
+    const adapter = createChatGptAdapter()
+    expect(adapter.getAllAssistantReplies()).toEqual(['PONG4'])
+    expect(adapter.getResponseContainers()).toHaveLength(1)
+    expect(adapter.findResponseContainer(document.querySelector('[data-d-stream-word]')))
+      .toBe(document.querySelector('[class*="ResponseRoot"]'))
+  })
+
+  it('rejects explicit user authored ResponseRoot markup from assistant reading', () => {
+    document.body.innerHTML = `
+      <main><div data-turn="user">
+        <div class="DiiResponseRoot-HfQrE"><p><span data-d-stream-word="">NOT AN ASSISTANT</span></p></div>
+      </div></main>
+    `
+    expect(createChatGptAdapter().getAllAssistantReplies()).toEqual([])
+  })
+
   it('reads assistant markdown replies without action button text', () => {
     document.body.innerHTML = `
       <section data-turn="assistant" data-testid="conversation-turn-2">
