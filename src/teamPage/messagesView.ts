@@ -225,7 +225,8 @@ export function createMessagesView(deps: MessagesViewDependencies): MessagesView
       if (message.roleId && message.status === 'pending' && role) {
         tools.append(createMessageIconButton('停止回复', 'stop', () => deps.stopRoleReply(role).catch(error => deps.showError(error instanceof Error ? error.message : String(error))), { activateOnPointerDown: true }))
       } else if (message.roleId && message.status === 'error' && role) {
-        tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
+        // A failed send might have already produced a source-site reply. Never replay it.
+        tools.append(createMessageIconButton('Kaynak yanıtını senkronize et (yeniden gönderme yok)', 'retry', () => handleResyncMessage(message)))
       } else if (message.roleId && role?.modelSource === 'external') {
         tools.append(createMessageIconButton('重新回复', 'retry', () => deps.retryRoleReply(role, message.id).catch(error => deps.showError(error instanceof Error ? error.message : String(error)))))
       } else if (message.roleId) {

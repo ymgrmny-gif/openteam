@@ -781,7 +781,7 @@ describe('team page messages view boundary', () => {
     expect(retryRoleReply).toHaveBeenCalledWith(role, message.id)
   })
 
-  it('renders retry controls for failed site assistant replies', () => {
+  it('resyncs failed site assistant replies without replaying the prompt', () => {
     const now = Date.now()
     const chat: GroupChat = {
       id: 'chat-1',
@@ -826,6 +826,7 @@ describe('team page messages view boundary', () => {
     }
     const messagesEl = document.createElement('section')
     const retryRoleReply = vi.fn(async () => undefined)
+    const resyncMessageReply = vi.fn(async () => undefined)
 
     createMessagesView({
       state: createTeamPageState(),
@@ -842,7 +843,7 @@ describe('team page messages view boundary', () => {
       focusRoleFrame: vi.fn(),
       insertMention: vi.fn(),
       setReference: vi.fn(),
-      resyncMessageReply: vi.fn(async () => undefined),
+      resyncMessageReply,
       retryRoleReply,
       stopRoleReply: vi.fn(async () => undefined),
       runCommand: vi.fn(async () => undefined),
@@ -852,11 +853,12 @@ describe('team page messages view boundary', () => {
       log: { warn: vi.fn() },
     }).renderMessages()
 
-    const retryButton = messagesEl.querySelector<HTMLButtonElement>('.message-tools [aria-label="重新回复"]')
-    expect(retryButton).not.toBeNull()
-    expect(messagesEl.querySelector('.message-tools [aria-label="重新同步完整回复"]')).toBeNull()
-    retryButton?.click()
-    expect(retryRoleReply).toHaveBeenCalledWith(role, message.id)
+    const resyncButton = messagesEl.querySelector<HTMLButtonElement>('.message-tools [aria-label="Kaynak yanıtını senkronize et (yeniden gönderme yok)"]')
+    expect(resyncButton).not.toBeNull()
+    expect(messagesEl.querySelector('.message-tools [aria-label="重新回复"]')).toBeNull()
+    resyncButton?.click()
+    expect(resyncMessageReply).toHaveBeenCalledWith(message)
+    expect(retryRoleReply).not.toHaveBeenCalled()
   })
 
   it('stops a streaming external reply on pointer down before stream renders can replace the button', () => {

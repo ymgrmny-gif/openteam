@@ -43,3 +43,15 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [x] IndependentReviewer salt-okunur karşı inceleme sonucu `REWORK` verdi; testler yeniden çalıştırılmadı, native E2E NOT_RUN ve Phase 0 FULL ACCEPTED değil. Ön rapor `docs/RD2_PHASE0_PRELIMINARY_AUDIT_20261010.md`.
 - [ ] Daemon ACP listesi hâlâ `agents=[]`: browser role ChatGPT araç erişimi ile ayrı native/local ACP kodlama ajanı bağlantısı farklıdır; gerçek kodlama için ayrıca sağlam yetki ve araç testi gerekli.
 - [ ] İlk Phase 0 denetiminin gerçek tamamlanma koşulu: A+B+Başmimar raporları ve IndependentReviewer kod/satır kanıtı, P0–P3 onayı, kod değişikliği olmadan TODO/GLOBALMEMORY eşleşmesi.
+
+## 2026-10-10 / RD2-AUDIT-002 işçi ve yönetici görev dağıtımı
+
+- [x] Mevcut OpenTeam Phase0 odası yeniden kullanıldı, yeni sohbet/rol/worktree açılmadı. Oda: `chat-c7580eff-fa2e-4f09-a247-3642cfe9753d`.
+- [x] `Manager`: RD2-PHASE0-MANAGER-002 — ilk kaynak bulgularını D01–D22/roadmap kabul matrisine dönüştürme ve Reviewer kapısı. **İletildi; teslim/kanıt bekleniyor**.
+- [x] `EngineerA`: RD2-AUDIT-002A — D01–D11, V1 F01–F28 hedef/contract/test kaynak matrisi. OpenTeam msg `msg-e126a6e4-d853-4722-b0e5-5474de57d1c4`. **İletildi; teslim bekleniyor**.
+- [x] `EngineerB`: RD2-AUDIT-002B — D12–D22, V1 F29–F57 / X01–X03 hedef/contract/test kaynak matrisi. OpenTeam msg `msg-c58d49ab-887b-4046-b417-5752cc2a928d`. **İletildi; teslim bekleniyor**.
+- [ ] A+B+Manager son raporları `task.read` ile `received` ve gerçek dosya:satır doğrulanmadan `IndependentReviewer` son kapsam kabulü yok.
+- [x] Hata durumundaki assistant yanıtına `yeniden gönder` yerine açık `kaynak yanıtı senkronize et` eylemi bağlandı; bu eylem eski isteği **tekrar göndermiyor**. `src/teamPage/messagesView.ts` ve unit test değişti.
+- [x] `npm run verify` EXIT0: TypeScript PASS, Vitest `711/711` PASS (85 dosya), Vite build PASS. Native/gerçek Chrome reload E2E **henüz yapılmadı**.
+- [ ] Kurulu Chrome uzantısının yeni build'e kontrollü geçişi; aktif Manager/A/B denetim yanıtları tamamlanmadan yeniden yükleme YOK.
+- [ ] Daha derin ACK/late-reply / yanlış kaynak yanıtı eşleştirme riskini korumalı senkronizasyon testinde kanıtla. `agent.list=[]` olduğu için yerel ACP kod işçisi hazır değil; browser rolü MCP okumaları ACP değildir.
