@@ -1306,6 +1306,32 @@ describe('background group chat experience handlers', () => {
     expect(promptCalls[0][1].content).not.toContain('用户最新消息：\n第一条消息')
   })
 
+  it('rejects resync of an old assistant reply when a newer targeted task exists', async () => {
+    const store = makeStore()
+    store.currentChatId = 'chat-1'
+    store.chatsById['chat-1'] = { ...makeChat('chat-1', ['role-1']), messageIds: ['msg-1', 'msg-2'], nextMessageSeq: 3 }
+    store.chatOrder = ['chat-1']
+    store.rolesById['role-1'] = makeRole('chat-1', 'role-1', '工程师')
+    store.messagesById['msg-1'] = {
+      id: 'msg-1', chatId: 'chat-1', seq: 1, type: 'assistant',
+      roleId: 'role-1', roleName: '工程师', content: 'Eski hata',
+      createdAt: 1, status: 'error',
+    }
+    store.messagesById['msg-2'] = {
+      id: 'msg-2', chatId: 'chat-1', seq: 2, type: 'user',
+      content: 'Yeni görev', targetRoleIds: ['role-1'], createdAt: 2, status: 'received',
+    }
+    const harness = await setupBackground(store)
+    await harness.invoke({ type: 'TEAM_FRAME_ROLE_READY', chatId: 'chat-1', roleId: 'role-1', hostTabId: 900 }, { tab: { id: 101 } as chrome.tabs.Tab, frameId: 7, url: 'https://chatgpt.com/c/abc' })
+    const result = await harness.invoke({
+      type: 'GROUP_MESSAGE_RESYNC_REPLY', chatId: 'chat-1', roleId: 'role-1', messageId: 'msg-1',
+    }) as { ok: boolean; error?: string }
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('daha yeni bir görev')
+    expect(harness.tabsSendMessage.mock.calls.some(call => call[1]?.type === 'TEAM_RESYNC_REPLY')).toBe(false)
+    expect(store.messagesById['msg-1'].content).toBe('Eski hata')
+  })
+
   it('asks the role frame to resync the selected assistant reply and returns the updated store', async () => {
     const store = makeStore()
     store.currentChatId = 'chat-1'

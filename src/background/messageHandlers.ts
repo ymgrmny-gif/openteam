@@ -436,6 +436,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
       const role = requireRole(store, chat.id, roleId)
       const assistantMessage = store.messagesById[messageId]
       if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+      assertSafeReplyResyncTarget(store, chat, role, assistantMessage)
       return { currentContent: assistantMessage.content }
     })
 
@@ -724,6 +725,7 @@ export function createMessageHandlers(deps: MessageHandlersDependencies): Backgr
         const role = requireRole(store, chat.id, identity.roleId)
         const assistantMessage = store.messagesById[messageId]
         if (!isAssistantMessageForRole(assistantMessage, chat, role)) throw new Error('该回复不属于这个人员')
+        assertSafeReplyResyncTarget(store, chat, role, assistantMessage)
 
         const previousAttachmentIds = readyAttachmentIds(assistantMessage.attachments)
         updateConversation(role, readOptionalString(message.conversationUrl), readOptionalString(message.conversationId))
@@ -1531,6 +1533,23 @@ function isUserMessageForRole(message: GroupMessage | undefined, chat: GroupChat
 
 function isAssistantMessageForRole(message: GroupMessage | undefined, chat: GroupChat, role: GroupRole): message is AssistantGroupMessage {
   return Boolean(message && message.chatId === chat.id && message.type === 'assistant' && message.roleId === role.id)
+}
+
+/** Never overwrite an older response with the latest response from a newer prompt. */
+function assertSafeReplyResyncTarget(store: OpenTeamStore, chat: GroupChat, role: GroupRole, reply: AssistantGroupMessage): void {
+  if (role.status === 'thinking' || role.status === 'loading') {
+    throw new Error('Kaynak yanıtı hâlâ üretiliyor; yeniden gönderim veya yanlış senkronizasyon engellendi')
+  }
+  for (const id of chat.messageIds) {
+    const next = store.messagesById[id]
+    if (!next || next.seq <= reply.seq) continue
+    if (next.type === 'assistant' && next.roleId === role.id) {
+      throw new Error('Bu personele ait daha yeni bir yanıt bulundu; eski yanıt güvenle senkronize edilemez')
+    }
+    if (next.type === 'user' && (next.targetRoleIds?.includes(role.id) || next.mentionedRoleIds?.includes(role.id))) {
+      throw new Error('Bu personele daha yeni bir görev gönderildi; eski yanıt güvenle senkronize edilemez')
+    }
+  }
 }
 
 function isPendingRetryStatus(message: GroupMessage, role: GroupRole): boolean {

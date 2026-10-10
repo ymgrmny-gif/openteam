@@ -56,3 +56,12 @@ Bu OpenTeam özelliği RD2-004A işçi kapanış ve mimari denetim kapılarını
 - [ ] Kurulu Chrome uzantısının yeni build'e kontrollü geçişi; aktif Manager/A/B denetim yanıtları tamamlanmadan yeniden yükleme YOK.
 - [x] Canlı hata kök nedeni: ChatGPT Türkçe `Durdur` üretim düğmesi `src/content/sites/chatgpt.ts` regex'inde yoktu; eklendi. Gönderim sonrası yeni kullanıcı turn'u henüz görünmese de görünür `Durdur` ile ACK kabulünü test eden regresyon eklendi. `npm run verify`: 712/712 test PASS, typecheck+build doğrulanınca bu kaydı sonlandır.
 - [ ] Hata sonrası kaynak yanıtı yanlış mesaja bağlanmama/late-reply resync, kurulu Chrome eklentisine yeni derlemenin kontrollü geçirilmesi ve gerçek site E2E hâlâ gerekli. `agent.list=[]` olduğu için yerel ACP kod işçisi hazır değil; browser rolü MCP okumaları ACP değildir.
+
+## 2026-10-10 / Devam — yanıt yakalama ikinci güvenlik düzeltmesi
+
+- [x] Türkçe ChatGPT `Durdur` generation/ACK eksikliği kapatıldı; sentetik test ve `npm run verify` 712/712 PASS; commit `550b9b2`.
+- [x] `GROUP_MESSAGE_RESYNC_REPLY` ve `TEAM_ROLE_REPLY_RESYNC` artık aynı role sonradan gönderilmiş görev veya daha yeni yanıt varsa eski assistant metnini güncellemeyi reddediyor. Negatif test `src/background/groupExperience.test.ts` eklendi.
+- [ ] Final source/test changes için tam verify, commit ve canlı kontrollü extension reload/readback tamamlanmadan production ACCEPTED değil.
+- [x] `RD2-PHASE0-MANAGER-002` gerçek 5245-karakterlik beş satırlı ürün/sözleşme/test risk matrisi teslim etti; kaynak satırları + `REWORK` kararı.
+- [ ] EngineerA D01-D11 genişletme gönderimi `send was not acknowledged` ile ERROR; kaynak ChatGPT'yi tekrar göndermeden doğrula. EngineerB D12-D22 yanıtı yalnız niyet; yeni Reviewer D01-D22 görevi yalnız niyet. Bunlar tamamlanmış sayılmıyor.
+- [ ] Local ACP `agent.list=[]`, gerçek kodlama işçileri/yerel run yetkileri yapılandırılmalı. Bu bir browser-MCP danışman rolünün kaynak okumasından farklıdır.
